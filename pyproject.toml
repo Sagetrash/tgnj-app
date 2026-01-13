@@ -1,0 +1,19 @@
+[project]
+name = "tgnj-app"
+version = "0.1.0"
+description = " A CRUD APP FOR A BUSINESS"
+readme = "README.md"
+authors = [
+    { name = "Sagetrash", email = "sagetrash1435@proton.me" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pandas>=2.3.3",
+]
+
+[project.scripts]
+tgnj-app = "tgnj_app:main"
+
+[build-system]
+requires = ["uv_build>=0.9.24,<0.10.0"]
+build-backend = "uv_build"
