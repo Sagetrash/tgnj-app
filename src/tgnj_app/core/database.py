@@ -27,15 +27,40 @@ class database:
     def sold_item(self):
         pass
 
-    def get_items_by_group(self):
-        pass
+    def get_items_by_group(self,sku_group:str):
+        query = """
+            SELECT * FROM inventory where sku_group = ?;
+        """
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute(query,(sku_group,))
+                return curs.fetchall()
+            except sql.Error:
+                return False
 
-    def get_item_by_sku(self):
-        pass
+    def get_item_by_sku(self,sku_group:str,sku_id:int):
+        query = """
+        SELECT * FROM inventory where id = (SELECT id FROM INVENTORY WHERE sku_group = ? AND sku_id = ?);
+        """
+        with self.conn as conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute(query,(sku_group,sku_id))
+                return cursor.fetchone()
+            except sql.Error:
+                return False
 
-    def delete_item(self):
-        pass
-
-
+    def delete_item(self,sku_group: str, sku_id: int):
+        query = """
+        DELETE FROM INVENTORY WHERE id = (SELECT id FROM INVENTORY WHERE sku_group = ? AND sku_id = ?);
+        """
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute(query,(sku_group,sku_id))
+                return True
+            except sql.Error:
+                return False
 if __name__ == "__main__":
     pass
