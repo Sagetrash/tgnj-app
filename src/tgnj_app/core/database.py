@@ -21,9 +21,24 @@ class database:
             except sql.Error:
                 return False
 
-    def edit_item(self):
-        pass
-    
+    def edit_item(self,sku_group:str,sku_id:int,shape:str=None,weight:float=None,length:int=None,width:int=None,depth:int=None):
+        allparams = locals()
+        updates = {k:v for k, v in allparams.items() if v is not None and k not in ('self','sku_group','sku_id')}
+        
+        set_clause = ", ".join([f"{k} = ? " for k in updates.keys()])
+        query = f"""
+        UPDATE inventory SET {set_clause} WHERE id = (SELECT id FROM INVENTORY WHERE sku_group = ? AND sku_id = ?);
+         """
+        params = list(updates.values()) + [sku_group,sku_id]
+        
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute(query,params)
+                return True
+            except sql.Error:
+                return False
+
     def sold_item(self):
         pass
 
@@ -62,5 +77,6 @@ class database:
                 return True
             except sql.Error:
                 return False
+
 if __name__ == "__main__":
     pass
