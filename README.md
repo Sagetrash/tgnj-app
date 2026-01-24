@@ -96,18 +96,3 @@ The GUI communicates with a local Flask server via these endpoints:
 Internal use only. (Or insert MIT/GPL here if you plan to open-source the code later).
 
 ```
-
----
-
-## General Instructions for Your Learning Project
-
-Since you are using this as a learning opportunity, here is how you keep the repo looking sharp while you build:
-
-* **Be Proud of the "Internal" Label:** There’s nothing wrong with saying "I built this for a specific business." In fact, it shows you can solve real-world problems.
-* **The "Roadmap" is Your Best Friend:** Since the app is under development, the **Roadmap** section tells people (and future employers) that you know what's missing and you're planning to fix it.
-* **Keep it Platform-Agnostic:** Now that we've removed the specific "CachyOS" instructions, any dev can pick this up. If there *is* a specific dependency (like a Linux system library), mention it under a "Platform Notes" header.
-* **Update the "How to Run" section frequently:** As you add features (like database migrations), make sure your setup instructions don't break.
-
-**Would you like me to help you draft a `.gitignore` file so you don't accidentally upload your local `inventory.db` or `__pycache__` folders to GitHub?**
-
-```
