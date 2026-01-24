@@ -8,7 +8,10 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "pandas>=2.3.3",
+    "flask>=3.1.2",
+    "pyside6>=6.10.1",
+    "pywebview>=6.1",
+    "qtpy>=2.4.3",
 ]
 
 [project.scripts]
