@@ -22,7 +22,7 @@ def index():
 def getData(sku_group:str):
     data = db_instance.get_items_by_group(sku_group)
     cleanData = [dict(row) for row in data]
-    return jsonify(cleanData)
+    return jsonify(cleanData),201
 
 @app.route('/api/addItem',methods=['POST'])
 def addItem():
@@ -59,4 +59,3 @@ def editItems(group,id):
         return jsonify(message("updated item successfully")), 201
     else:
         return jsonify(message("failute updating items")), 500
-

@@ -1,0 +1,12 @@
+body {
+  display: grid;
+  grid-template-columns: 2fr 4fr;
+}
+
+.form-container {
+  border-right: solid 2px;
+  padding: 5% 0 0 10%;
+}
+.form-container h3 {
+  text-align: center;
+}
