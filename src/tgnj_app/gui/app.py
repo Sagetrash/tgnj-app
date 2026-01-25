@@ -43,7 +43,7 @@ def addItem():
     else:
         return jsonify({"message":"error"}), 500
 
-@app.route('/api/deleteItem/<sku_group>/<sku_id>',methods=["DELETE"])
+@app.route('/api/deleteItem/<sku_group>/<int:sku_id>',methods=["DELETE"])
 def deleteItem(sku_group:str,sku_id:int):
     success = db_instance.delete_item(sku_group=sku_group,sku_id=sku_id)
     if success:
@@ -51,6 +51,12 @@ def deleteItem(sku_group:str,sku_id:int):
     else:
         return jsonify(message("Error deleting item")), 500
 
-@app.route('/api/editItems')
-def editItems():
-    pass
+@app.route('/api/editItem/<group>/<int:id>',methods=["PATCH"])
+def editItems(group,id):
+    data = request.json
+    success = db_instance.edit_item(sku_group=group,sku_id=id, **data)
+    if success:
+        return jsonify(message("updated item successfully")), 201
+    else:
+        return jsonify(message("failute updating items")), 500
+

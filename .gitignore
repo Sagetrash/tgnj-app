@@ -9,5 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-*.db
+*.db*
 .tgnj-app-bruno
