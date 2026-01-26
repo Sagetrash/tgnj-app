@@ -4,9 +4,26 @@ body {
 }
 
 .form-container {
-  border-right: solid 2px;
-  padding: 5% 0 0 10%;
+  display: block;
+  position: sticky;
+}
+
+.form-area {
+  position: sticky;
+  top: 20px;
 }
 .form-container h3 {
+  text-align: center;
+}
+
+.table-row:hover {
+  background-color: aqua;
+}
+
+.modal-container {
+  display: none;
+}
+
+td {
   text-align: center;
 }
