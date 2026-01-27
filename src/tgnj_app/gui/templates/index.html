@@ -7,132 +7,104 @@
     <link rel="stylesheet" href="{{url_for('static',filename='style.css')}}" />
   </head>
   <body>
-    <!--  -->
-    <div class="form-container">
-      <div class="form-area">
-        <h3>input for new items</h3>
-        <form action="" onsubmit="event.preventDefault()">
-          <label for="sku_group">Sku Group</label>
-          <input
-            type="text"
-            id="sku_group"
-            name="sku_group"
-            oninput="liveLoadGroup()"
-            required
-          />
-          <br />
-          <label for="item_id">id</label>
-          <input type="text" name="item_id" id="item_id" required />
-          <br />
-          <label for="shape">shape</label>
-          <input type="text" name="shape" id="shape" required />
-          <br />
-          <label for="weight">weight</label>
-          <input
-            type="text"
-            name="weight"
-            id="weight"
-            placeholder="weight in cts."
-            required
-          />
-          <br />
-          <label for="length">length</label>
-          <input
-            type="text"
-            name="length"
-            id="length"
-            placeholder="length in mm"
-            required
-          />
-          <br />
-          <label for="width">width</label>
-          <input
-            type="text"
-            name="width"
-            id="width"
-            placeholder="width in mm"
-            required
-          />
-          <br />
-          <label for="depth">depth</label>
-          <input
-            type="text"
-            name="depth"
-            id="depth"
-            placeholder="depth in mm"
-            required
-          />
-          <br />
-          <button type="submit">submit</button>
-        </form>
+    <div class="window">
+      <!--  -->
+      <div class="form-container">
+        <div class="form-area">
+          <h3>Input for new items</h3>
+          <form action="" onsubmit="event.preventDefault()">
+            <div>
+              <label for="sku_group">Sku Group</label>
+              <span>:</span>
+              <input
+                type="text"
+                id="sku_group"
+                name="sku_group"
+                oninput="liveLoadGroup()"
+                required
+              />
+            </div>
+            <br />
+            <div>
+              <label for="item_id">id</label>
+              <span>:</span>
+              <input type="text" name="item_id" id="item_id" required />
+            </div>
+            <div>
+              <label for="shape">shape</label>
+              <span>:</span>
+              <input type="text" name="shape" id="shape" required />
+            </div>
+            <div>
+              <label for="weight">weight</label>
+              <span>:</span>
+              <input
+                type="text"
+                name="weight"
+                id="weight"
+                placeholder="weight in cts."
+                required
+              />
+            </div>
+            <div>
+              <label for="length">length</label>
+              <span>:</span>
+              <input
+                type="text"
+                name="length"
+                id="length"
+                placeholder="length in mm"
+                required
+              />
+            </div>
+            <div>
+              <label for="width">width</label>
+              <span>:</span>
+              <input
+                type="text"
+                name="width"
+                id="width"
+                placeholder="width in mm"
+                required
+              />
+            </div>
+            <div>
+              <label for="depth">depth</label>
+              <span>:</span>
+              <input
+                type="text"
+                name="depth"
+                id="depth"
+                placeholder="depth in mm"
+                required
+              />
+            </div>
+            <span onclick="handleFormSubmit()" class="form-submit-button"
+              >Add Item</span
+            >
+          </form>
+        </div>
+      </div>
+      <!--  -->
+      <div class="table-window">
+        <div class="table-container">
+          <table id="display-table">
+            <thead>
+              <tr>
+                <th>sku</th>
+                <th>shape</th>
+                <th>weight</th>
+                <th>length</th>
+                <th>width</th>
+                <th>depth</th>
+                <th class="deleteCol">delete</th>
+              </tr>
+            </thead>
+            <tbody id="display-table-body"></tbody>
+          </table>
+        </div>
       </div>
     </div>
-    <!--  -->
-    <div class="table-container">
-      <table id="display-table">
-        <thead>
-          <tr>
-            <th>sku</th>
-            <th>shape</th>
-            <th>weight</th>
-            <th>length</th>
-            <th>width</th>
-            <th>depth</th>
-            <th>delete</th>
-          </tr>
-        </thead>
-        <tbody id="display-table-body"></tbody>
-      </table>
-    </div>
-    <!-- <div id="modal-container" class="modal-container">
-      <div class="modal-content">
-        <h3>edit item</h3>
-        <p id="item_sku_id">hello</p>
-        <br />
-        <form action="" id="edit-form" onsubmit="handleEditFormSubmit()">
-          <label for="shape">shape</label>
-          <input type="text" name="shape" id="edit_shape" required />
-          <br />
-          <label for="weight">weight</label>
-          <input
-            type="text"
-            name="weight"
-            id="edit_weight"
-            placeholder="weight in cts."
-            required
-          />
-          <br />
-          <label for="length">length</label>
-          <input
-            type="text"
-            name="length"
-            id="edit_length"
-            placeholder="length in mm"
-            required
-          />
-          <br />
-          <label for="width">width</label>
-          <input
-            type="text"
-            name="width"
-            id="edit_width"
-            placeholder="width in mm"
-            required
-          />
-          <br />
-          <label for="depth">depth</label>
-          <input
-            type="text"
-            name="depth"
-            id="edit_depth"
-            placeholder="depth in mm"
-            required
-          />
-          <br />
-          <button id="edit_submit">edit</button>
-        </form>
-      </div>
-    </div> -->
     <script src="{{ url_for('static',filename='script.js')}}"></script>
   </body>
 </html>

@@ -51,7 +51,7 @@ async function loadItemsByGroup(sku_group) {
     setItemId(data);
     document.getElementById("shape").value =
       `${data[data.length - 1].shape.charAt(0).toUpperCase() + data[data.length - 1].shape.slice(1)}`;
-    console.log("data sent!");
+    scrollToEnd();
   } catch (error) {
     console.error("error loading items: ", error);
   }
@@ -61,24 +61,32 @@ async function renderTable(data) {
   const tbody = document.getElementById("display-table-body");
   tbody.innerHTML = "";
   if (!data || data.length === 0) {
-    tbody.innerHTML =
-      "<tr><td colspan = '5' style = 'text-align:center;'>No items found in this group.</td></tr>";
+    tbody.innerHTML = `<tr class = "table-row" style=""= ><td colspan = '7' style = 'text-align:center;'>No items found in this group.</td></tr>`;
     return;
   }
+  counter = 0;
   data.forEach((item) => {
+    counter++;
     const row = document.createElement("tr");
     const formattedId = String(item.sku_id).padStart(3, "0");
     row.classList.add("table-row");
+    if (counter == data.length) {
+      row.id = "last-row";
+    }
+    if (counter % 2 === 0) {
+      row.classList.add("alt-row");
+    }
     row.innerHTML = `
     <td>${item.sku_group}-${formattedId}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'shape',this.innerText)">${item.shape}</td>
-    <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'weight',this.innerText)">${item.weight.toFixed(2)}</td>
+    <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'weight',this.innerText)">${item.weight}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'length',this.innerText)">${item.length}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'width',this.innerText)">${item.width}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'depth',this.innerText)">${item.depth}</td>
-    <td onclick = "event.stopPropagation();"><button onclick="deleteItem('${item.sku_group}',${item.sku_id})">❌</button></td>
+    <td class="deleteCol" onclick = "event.stopPropagation();"><span class="delete-button" onclick="deleteItem('${item.sku_group}',${item.sku_id})"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#" class="delete-icon">
+    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+  </svg></span></td>
     `;
-
     tbody.appendChild(row);
   });
 }
@@ -122,16 +130,16 @@ async function deleteItem(sku_group, sku_id) {
 }
 
 async function handleFormSubmit() {
-  console.log("pressed submit");
   const payload = {
     sku_group: document.getElementById("sku_group").value,
     sku_id: parseInt(document.getElementById("item_id").value),
     shape: document.getElementById("shape").value.toLowerCase(),
-    weight: parseFloat(document.getElementById("weight").value).toFixed(2),
+    weight: parseFloat(document.getElementById("weight").value),
     length: parseInt(document.getElementById("length").value),
     width: parseInt(document.getElementById("width").value),
     depth: parseInt(document.getElementById("depth").value),
   };
+
   for (const key in payload) {
     if (Object.hasOwnProperty.call(payload, key)) {
       if (!payload[key] || payload[key].length === 0) {
@@ -155,6 +163,11 @@ async function handleFormSubmit() {
   document.getElementById("weight").focus();
   item_id = document.getElementById("item_id");
   item_id.value = String(Number(item_id.value) + 1);
+}
+
+function scrollToEnd() {
+  const row = document.getElementById("last-row");
+  if (row) row.scrollIntoView({ behaviour: "smoot", block: "end" });
 }
 
 window.onload = () => {

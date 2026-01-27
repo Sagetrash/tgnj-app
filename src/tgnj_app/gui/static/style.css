@@ -1,29 +1,182 @@
 body {
-  display: grid;
-  grid-template-columns: 2fr 4fr;
+  height: 100%;
+  margin: 0px;
+  background-color: #090443;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #e8e2db;
 }
 
-.form-container {
-  display: block;
-  position: sticky;
+.window {
+  display: flex;
+  flex-direction: row;
+  grid-template-columns: 2fr 4fr;
+  flex-grow: 1;
+  border-collapse: collapse;
+  min-height: 100vh;
+  width: 100vw;
+}
+
+.button {
+  font-size: large;
+}
+
+.form {
+  --width-of-input: 200px;
+  --border-height: 1px;
+  --border-before-color: rgba(221, 221, 221, 0.39);
+  --border-after-color: #5891ff;
+  position: relative;
+  width: var(--width-of-input);
+}
+/* styling of Input */
+.input {
+  font-size: 0.9rem;
+  background-color: transparent;
+  width: 100%;
+  box-sizing: border-box;
+  padding-inline: 0.5em;
+  padding-block: 0.7em;
+  border: none;
+  border-bottom: var(--border-height) solid var(--border-before-color);
+}
+
+input:focus {
+  outline: none;
 }
 
 .form-area {
   position: sticky;
   top: 20px;
-}
-.form-container h3 {
-  text-align: center;
+  align-self: center;
+  width: 100%;
 }
 
+.form-container h3 {
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.form-container {
+  /* padding: 10px; */
+  background-color: #1a3263;
+  flex: 1;
+  flex-grow: 1;
+  position: sticky;
+  height: inherit;
+}
+.table-window {
+  background-color: #547792;
+
+  flex: 2;
+}
+
+.table-container {
+  background-color: black;
+}
+.table-row {
+  background-color: #39688c;
+}
 .table-row:hover {
-  background-color: aqua;
+  background-color: #39688c82;
+  cursor: pointer;
+}
+
+.alt-row {
+  background-color: #5a80bd;
+  color: E8E2DB;
+}
+
+#display-table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: center;
+  color: #eee;
+}
+
+.deleteCol {
+  width: 7%;
+}
+
+th {
+  text-transform: uppercase;
+}
+#display-table td,
+th {
+  border: 1px solid white;
+}
+
+#display-table thead th {
+  background-color: #16355e;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 30px;
 }
 
 .modal-container {
   display: none;
 }
 
-td {
+.form-area form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 10px;
+  justify-items: right;
+}
+.form-area form div {
+  display: flex;
+  flex-flow: row nowrap;
+  justify-items: center;
+  justify-content: space-evenly;
+}
+.form-area form div label {
+  width: 100px;
+  text-align: left;
+}
+.form-area {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.form-submit-button {
+  cursor: pointer;
+  outline: 0;
+  display: inline-block;
+  font-weight: 400;
+  line-height: 1.5;
   text-align: center;
+  background-color: transparent;
+  border: 1px solid transparent;
+  padding: 3px 24px;
+  font-size: 1rem;
+  border-radius: 0.25rem;
+  width: fit-content;
+  transition:
+    color 0.15s ease-in-out,
+    background-color 0.15s ease-in-out,
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
+  color: #e8e2db;
+  border-color: #fab95b;
+  align-self: flex-end;
+  margin-right: 20%;
+}
+.form-submit-button:hover {
+  color: #1a3263;
+  background-color: #fab95b;
+  border-color: #e8e2db;
+}
+
+.delete-button {
+  display: block;
+}
+
+.delete-button svg {
+  fill: white;
+}
+
+.delete-button:hover svg {
+  fill: rgb(216, 70, 34);
 }
