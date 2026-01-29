@@ -167,10 +167,49 @@ async function handleFormSubmit() {
 
 function scrollToEnd() {
   const row = document.getElementById("last-row");
-  if (row) row.scrollIntoView({ behaviour: "smoot", block: "end" });
+  if (row) row.scrollIntoView({ behaviour: "smooth", block: "end" });
+}
+
+async function getDbPath() {
+  response = await fetch("api/getDbPath", {
+    method: "GET",
+  });
+  data = await response.json();
+  db_field = document.getElementById("db_path");
+  db_field.innerText = data["db_Path"];
+}
+
+async function setDbPath() {
+  dbPathInput = document.getElementById("db_path");
+  if (!dbPathInput.innerHTML || dbPathInput.innerHTML.length === 0) {
+    alert("Enter a db Path");
+    getDbPath();
+    return;
+  }
+  payload = {
+    db_Path: dbPathInput.innerHTML,
+  };
+  try {
+    response = await fetch("api/setDbPath", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      if (response.status === 404) {
+        alert("no database found at provided path, please verify path");
+        getDbPath();
+      }
+    }
+    getDbPath();
+    liveLoadGroup();
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 window.onload = () => {
+  getDbPath();
   setupKeyboardNavigation();
   group = document.getElementById("sku_group").value;
   if (!group || group.length === 0) {

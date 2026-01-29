@@ -2,16 +2,35 @@ import os
 import webview
 from flask import Flask, render_template, jsonify, request
 from tgnj_app.core.database import database
-
-#_________________________________ setup __________________________________
-gui_dir  = os.path.dirname(__file__)
-app = Flask(__name__,template_folder=os.path.join(gui_dir,"templates"), static_folder=os.path.join(gui_dir,'static'))
-db_instance : database = None
+from pathlib import Path
+import json
 
 #____________________________ utility functions______________________
 
+def setConfig(db_path:Path):
+    if os.path.exists:
+        Path = str(db_path)
+        config = {
+            "db_Path":Path
+        }
+        with open(config_location, "w") as f:
+            json.dump(config,f)
+        return Path
+    else:
+        raise FileNotFoundError
+
 def message(string:str)-> dict:
     return {"message":string}
+
+#_________________________________ setup __________________________________
+config_location = Path(__file__).resolve().parent.parent.parent.parent / "config.json"
+gui_dir  = os.path.dirname(__file__)
+app = Flask(__name__,template_folder=os.path.join(gui_dir,"templates"), static_folder=os.path.join(gui_dir,'static'))
+db_path = setConfig(Path("/mnt/Driver_E/My Files/projects/tgnj-app/inventory.db"))
+db_instance : database = database(db_path)
+
+
+
 
 # ________________________ ROUTES ______________________
 @app.route('/')
@@ -59,3 +78,25 @@ def editItems(group,id):
         return jsonify(message("updated item successfully")), 201
     else:
         return jsonify(message("failute updating items")), 500
+
+@app.route('/api/setDbPath',methods=["PATCH"])
+def setDbPath():
+    global db_instance
+    data = request.json
+
+    inputPath = data.get('db_Path')
+    if not inputPath:
+        return jsonify({"message": "Error: db_Path key missing in request"}), 400
+    db_path = Path(inputPath)
+
+    try:
+        new_instance = database(db_path)
+        db_instance = new_instance
+        setConfig(db_path)
+    except FileNotFoundError:
+        return jsonify({"message":"file not found"}),404
+    return jsonify({"message":f"db path set to {db_instance.path}"}),201
+
+@app.route('/api/getDbPath', methods=["GET"])
+def getDbPath():
+    return jsonify({"db_Path":str(db_instance.path)}),200

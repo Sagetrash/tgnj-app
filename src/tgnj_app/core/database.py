@@ -2,15 +2,22 @@ import sqlite3 as sql
 from pathlib import Path
 
 class database:
-    def __init__(self,path: Path):
+    def __init__(self, path: Path):
         try:
-            self.path = path
-            self.conn = sql.connect(self.path,check_same_thread=False)
+            self.path = Path(path).resolve()
+            
+            db_uri = f"{self.path.as_uri()}?mode=rw"
+            
+            self.conn = sql.connect(db_uri, uri=True, check_same_thread=False)
+            
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA synchronous=NORMAL")
             self.conn.row_factory = sql.Row
+            
+        except sql.OperationalError as e:
+            raise FileNotFoundError(f"Database not found at {self.path}. Details: {e}")
         except sql.DatabaseError as e:
-            raise sql.DatabaseError
+            raise e
     
     def add_item(self,sku_group,sku_id,shape,weight,length,width,depth):
         query = f"""

@@ -5,10 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TGNJ APP</title>
     <link rel="stylesheet" href="{{url_for('static',filename='style.css')}}" />
+    <link
+      rel="icon"
+      href="{{ url_for('static', filename='logo.ico') }}"
+      type="image/x-icon"
+    />
   </head>
   <body>
+    <header>
+      <label for="db_path">Database Path:</label>
+      <p
+        type="text"
+        name="db_path"
+        id="db_path"
+        onblur="setDbPath()"
+        width="fit-content"
+        contenteditable="true"
+      ></p>
+    </header>
     <div class="window">
-      <!--  -->
       <div class="form-container">
         <div class="form-area">
           <h3>Input for new items</h3>

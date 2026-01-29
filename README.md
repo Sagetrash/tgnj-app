@@ -62,6 +62,7 @@ tgnj-app/
 │   └── tgnj_app/
 │       ├── core/           # Database wrapper & SQL logic
 │       ├── gui/            # Flask API, CSS, and Templates
+│       │   ├──
 │       └── main.py         # Application entry point & window launch
 ├── pyproject.toml          # Project metadata & dependencies
 └── README.md
@@ -90,9 +91,3 @@ The GUI communicates with a local Flask server via these endpoints:
 - [ ] Automated local database backups.
 
 ---
-
-## 📜 License
-
-Internal use only. (Or insert MIT/GPL here if you plan to open-source the code later).
-
-```

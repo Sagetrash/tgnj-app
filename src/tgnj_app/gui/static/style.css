@@ -28,6 +28,7 @@ body {
   position: relative;
   width: var(--width-of-input);
 }
+
 /* styling of Input */
 .input {
   font-size: 0.9rem;
@@ -179,4 +180,16 @@ th {
 
 .delete-button:hover svg {
   fill: rgb(216, 70, 34);
+}
+
+#db_path {
+  width: fit-content;
+  display: inline-block;
+  border: 1px solid;
+  padding: 2px 4px;
+}
+
+header {
+  position: sticky;
+  top: 0%;
 }
