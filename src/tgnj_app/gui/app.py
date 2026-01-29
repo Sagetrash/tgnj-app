@@ -22,15 +22,27 @@ def setConfig(db_path:Path):
 def message(string:str)-> dict:
     return {"message":string}
 
+def getConfig():
+    with open(config_location,'r') as f:
+        config = json.load(f)
+        if not Path(config.get('db_Path')).exists():
+            raise FileNotFoundError()
+        else:
+            return config
+
+
 #_________________________________ setup __________________________________
 config_location = Path(__file__).resolve().parent.parent.parent.parent / "config.json"
 gui_dir  = os.path.dirname(__file__)
 app = Flask(__name__,template_folder=os.path.join(gui_dir,"templates"), static_folder=os.path.join(gui_dir,'static'))
-db_path = setConfig(Path("/mnt/Driver_E/My Files/projects/tgnj-app/inventory.db"))
-db_instance : database = database(db_path)
-
-
-
+config = getConfig()
+try:
+    db_path = Path()
+    db_instance : database = database(db_path)
+except FileNotFoundError as e:
+    print(e)
+    setConfig(Path(''))
+    
 
 # ________________________ ROUTES ______________________
 @app.route('/')
