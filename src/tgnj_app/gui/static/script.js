@@ -79,7 +79,7 @@ async function renderTable(data) {
     row.innerHTML = `
     <td>${item.sku_group}-${formattedId}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'shape',this.innerText)">${item.shape}</td>
-    <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'weight',this.innerText)">${item.weight}</td>
+    <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'weight',this.innerText)">${item.weight.toFixed(2)}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'length',this.innerText)">${item.length}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'width',this.innerText)">${item.width}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'depth',this.innerText)">${item.depth}</td>
@@ -205,6 +205,14 @@ async function setDbPath() {
     liveLoadGroup();
   } catch (error) {
     console.error(error);
+  }
+}
+
+async function makePrintPdf() {
+  sku_group = document.getElementById("sku_group").value;
+  const printWindow = window.open(`api/printPdf/${sku_group}`, "_blank");
+  if (printWindow) {
+    printWindow.focus();
   }
 }
 

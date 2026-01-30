@@ -1,10 +1,30 @@
-import os
-import webview
-from flask import Flask, render_template, jsonify, request
-from tgnj_app.core.database import database
-from pathlib import Path
-import json
+# import os
+# import webview
+# from flask import Flask, render_template, jsonify, request, send_file
+# from tgnj_app.core.database import database
+# from tgnj_app.core.labelmaker import create_pdf
+# from pathlib import Path
+# import json
 
+import json
+import os
+from pathlib import Path
+from flask import Flask, render_template, jsonify, request, send_file
+from tgnj_app.core.database import database
+from tgnj_app.core.labelmaker import create_pdf
+
+GUI_DIR = Path(__file__).resolve().parent
+TEMPLATE_FOLDER = GUI_DIR / "templates"
+STATIC_FOLDER = GUI_DIR / "static"
+LOGO_PATH = STATIC_FOLDER / "labelLogo.png"
+
+CONFIG_LOCATION = Path.home() / "Config.json"
+
+app = Flask(
+    __name__, 
+    template_folder=str(TEMPLATE_FOLDER), 
+    static_folder=str(STATIC_FOLDER)
+)
 #____________________________ utility functions______________________
 
 def setConfig(db_path:Path):
@@ -13,7 +33,7 @@ def setConfig(db_path:Path):
         config = {
             "db_Path":Path
         }
-        with open(config_location, "w") as f:
+        with open(CONFIG_LOCATION, "w") as f:
             json.dump(config,f)
         return Path
     else:
@@ -23,7 +43,7 @@ def message(string:str)-> dict:
     return {"message":string}
 
 def getConfig():
-    with open(config_location,'r') as f:
+    with open(CONFIG_LOCATION,'r') as f:
         config = json.load(f)
         if not Path(config.get('db_Path')).exists():
             raise FileNotFoundError()
@@ -32,12 +52,13 @@ def getConfig():
 
 
 #_________________________________ setup __________________________________
-config_location = Path(__file__).resolve().parent.parent.parent.parent / "config.json"
-gui_dir  = os.path.dirname(__file__)
-app = Flask(__name__,template_folder=os.path.join(gui_dir,"templates"), static_folder=os.path.join(gui_dir,'static'))
-config = getConfig()
+# config_location = Path(__file__).resolve().parent.parent.parent.parent / "config.json"
+# gui_dir  = os.path.dirname(__file__)
+# app = Flask(__name__,template_folder=os.path.join(gui_dir,"templates"), static_folder=os.path.join(gui_dir,'static'))
+
 try:
-    db_path = Path()
+    config = getConfig()
+    db_path = Path(config.get('db_Path'))
     db_instance : database = database(db_path)
 except FileNotFoundError as e:
     print(e)
@@ -112,3 +133,20 @@ def setDbPath():
 @app.route('/api/getDbPath', methods=["GET"])
 def getDbPath():
     return jsonify({"db_Path":str(db_instance.path)}),200
+
+@app.route('/api/printPdf/<sku_group>')
+def printpdf(sku_group):
+    data = db_instance.get_items_by_group(sku_group=sku_group)
+    if not data:
+        return jsonify(message("no data found")),404
+    
+    try:
+        pdf_buffer = create_pdf(data=data,logo_path=L)
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=f"Labels_{sku_group}.pdf"
+        )
+    except Exception as e:
+        return jsonify(message(f"{e}")),500
