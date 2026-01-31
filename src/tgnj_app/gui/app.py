@@ -7,15 +7,19 @@
 # import json
 
 import json
-import os
+import os, sys
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request, send_file
 from tgnj_app.core.database import database
 from tgnj_app.core.labelmaker import create_pdf
 
-GUI_DIR = Path(__file__).resolve().parent
-TEMPLATE_FOLDER = GUI_DIR / "templates"
-STATIC_FOLDER = GUI_DIR / "static"
+def get_bundle_path(rel_path):
+    if hasattr(sys, '_MEIPASS'):
+        return Path(sys._MEIPASS) / rel_path
+    return Path(__file__).resolve().parent / rel_path
+
+TEMPLATE_FOLDER = get_bundle_path("templates")
+STATIC_FOLDER = get_bundle_path("static")
 LOGO_PATH = STATIC_FOLDER / "labelLogo.png"
 
 CONFIG_LOCATION = Path.home() / "Config.json"
@@ -141,7 +145,7 @@ def printpdf(sku_group):
         return jsonify(message("no data found")),404
     
     try:
-        pdf_buffer = create_pdf(data=data,logo_path=L)
+        pdf_buffer = create_pdf(data=data,logo_path=LOGO_PATH)
         return send_file(
             pdf_buffer,
             mimetype='application/pdf',
