@@ -7,12 +7,12 @@
 # import json
 
 import json
-import os, sys
+import os, sys, io
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request, send_file
 from tgnj_app.core.database import database
 from tgnj_app.core.labelmaker import create_pdf
-
+from csv import writer
 def get_bundle_path(rel_path):
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS) / rel_path
@@ -138,7 +138,7 @@ def setDbPath():
 def getDbPath():
     return jsonify({"db_Path":str(db_instance.path)}),200
 
-@app.route('/api/printPdf/<sku_group>')
+@app.route('/api/printPdf/<sku_group>', methods=["GET"])
 def printpdf(sku_group):
     data = db_instance.get_items_by_group(sku_group=sku_group)
     if not data:
@@ -154,3 +154,14 @@ def printpdf(sku_group):
         )
     except Exception as e:
         return jsonify(message(f"{e}")),500
+
+@app.route('/api/getCsvData/<sku_group>',methods=["GET"])
+def getCsvData(sku_group):
+
+    data = db_instance.extract_data(sku_group=sku_group)
+    if not data:
+        return jsonify(message("no data found")),404
+    output = io.StringIO()
+    pen = writer(output,delimiter="\t")
+    pen.writerows(data)
+    return output.getvalue(),201

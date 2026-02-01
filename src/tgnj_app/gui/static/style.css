@@ -47,7 +47,7 @@ input:focus {
 
 .form-area {
   position: sticky;
-  top: 20px;
+  top: 55px;
   align-self: center;
   width: 100%;
 }
@@ -62,8 +62,6 @@ input:focus {
   background-color: #1a3263;
   flex: 1;
   flex-grow: 1;
-  position: sticky;
-  height: inherit;
 }
 .table-window {
   background-color: #547792;
@@ -109,9 +107,11 @@ th {
 #display-table thead th {
   background-color: #16355e;
   position: sticky;
-  top: 0;
   z-index: 1;
   height: 30px;
+  top: 57px;
+  border-bottom: none;
+  /* border-top: 2px solid white; */
 }
 
 .modal-container {
@@ -189,7 +189,48 @@ th {
   padding: 2px 4px;
 }
 
+.db_path_container {
+  width: fit-content;
+}
+
 header {
   position: sticky;
-  top: 0%;
+  top: 0;
+  z-index: 1000;
+  background-color: #090443;
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 20px;
+  border-bottom: 1px solid #fab95b;
+  max-height: 50px;
+}
+
+.button {
+  cursor: pointer;
+  outline: 0;
+  display: inline-block;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: center;
+  background-color: transparent;
+  border: 1px solid transparent;
+  padding: 3px 24px;
+  font-size: 1rem;
+  border-radius: 0.25rem;
+  width: fit-content;
+  height: fit-content;
+  align-self: center;
+  transition:
+    color 0.15s ease-in-out,
+    background-color 0.15s ease-in-out,
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
+  color: #e8e2db;
+  border-color: #fab95b;
+}
+
+.button:hover {
+  color: #1a3263;
+  background-color: #fab95b;
+  border-color: #e8e2db;
 }

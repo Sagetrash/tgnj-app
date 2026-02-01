@@ -13,15 +13,20 @@
   </head>
   <body>
     <header>
-      <label for="db_path">Database Path:</label>
-      <p
-        type="text"
-        name="db_path"
-        id="db_path"
-        onblur="setDbPath()"
-        width="fit-content"
-        contenteditable="true"
-      ></p>
+      <div class="db_path_container">
+        <label for="db_path">Database Path:</label>
+        <p
+          type="text"
+          name="db_path"
+          id="db_path"
+          onblur="setDbPath()"
+          width="fit-content"
+          contenteditable="true"
+        ></p>
+      </div>
+      <span class="button" onclick="extractData()" id="extract-btn"
+        >Extract Data</span
+      >
     </header>
     <div class="window">
       <div class="form-container">
