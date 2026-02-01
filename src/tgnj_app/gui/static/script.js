@@ -216,6 +216,28 @@ async function makePrintPdf() {
   }
 }
 
+async function extractData() {
+  try {
+    sku_group = document.getElementById("sku_group").value;
+    const response = await fetch(`/api/getCsvData/${sku_group}`);
+    const data = await response.text();
+    if (!data.trim()) {
+      console.error("no data found");
+      return;
+    }
+    await navigator.clipboard.writeText(data);
+    const btn = document.getElementById("extract-btn");
+    const originalText = btn.textContent;
+    btn.textContent = "✅ Copied!";
+
+    setTimeout(() => {
+      btn.textContent = originalText;
+    }, 2000);
+  } catch (err) {
+    console.error("copy failed");
+  }
+}
+
 window.onload = () => {
   getDbPath();
   setupKeyboardNavigation();

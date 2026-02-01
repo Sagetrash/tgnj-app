@@ -104,5 +104,20 @@ class database:
                 if curs:
                     curs.close()
 
+    def extract_data(self,sku_group:str):
+        query = """
+            SELECT shape, length || ' mm', width || ' mm', depth || ' mm', printf('%.2f',weight) || ' Ct.' FROM inventory where sku_group = ?;
+        """
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute(query,(sku_group,))
+                return curs.fetchall()
+            except sql.Error as e:
+                return False
+            finally:
+                if curs:
+                    curs.close()
+
 if __name__ == "__main__":
     pass
