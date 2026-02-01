@@ -106,7 +106,7 @@ class database:
 
     def extract_data(self,sku_group:str):
         query = """
-            SELECT shape, length || ' mm', width || ' mm', depth || ' mm', printf('%.2f',weight) || ' Ct.' FROM inventory where sku_group = ?;
+            SELECT UPPER(SUBSTR(shape, 1, 1)) || LOWER(SUBSTR(shape, 2)), length || ' mm', width || ' mm', depth || ' mm', printf('%.2f',weight) || ' Ct.' FROM inventory where sku_group = ?;
         """
         with self.conn as conn:
             try:
