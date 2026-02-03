@@ -13,6 +13,8 @@ from flask import Flask, render_template, jsonify, request, send_file
 from tgnj_app.core.database import database
 from tgnj_app.core.labelmaker import create_pdf
 from csv import writer
+from tgnj_app.core.legacyUpload import ReadSpecificColumns
+
 def get_bundle_path(rel_path):
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS) / rel_path
@@ -165,3 +167,28 @@ def getCsvData(sku_group):
     pen = writer(output,delimiter="\t")
     pen.writerows(data)
     return output.getvalue(),201
+
+@app.route('/api/UploadLegacyCsv',methods=["POST"])
+def addLegacyData():
+    response = request.json
+    csv_location = Path(response.get("location"))
+    if csv_location.exists():
+        dataframe = ReadSpecificColumns(csv_location)
+    else:
+        return jsonify(message("File not Found")),404
+    
+    for data in dataframe:
+        sku_group = data.get('sku_group')
+        sku_id = data.get('sku_id')
+        shape = data.get('shape')
+        weight = data.get('weight')
+        length = data.get('length')
+        width = data.get('width')
+        depth = data.get('depth')
+        print(sku_id)
+        success = db_instance.add_item(sku_group=sku_group,sku_id=sku_id,shape=shape,weight=weight,length=length,width=width,depth=depth)
+
+    if success:
+        return jsonify({'message':"stone added successfully"}),201
+    else:
+        return jsonify({"message":"error"}), 500
