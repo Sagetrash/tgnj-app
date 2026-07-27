@@ -1,11 +1,3 @@
-# import os
-# import webview
-# from flask import Flask, render_template, jsonify, request, send_file
-# from tgnj_app.core.database import database
-# from tgnj_app.core.labelmaker import create_pdf
-# from pathlib import Path
-# import json
-
 import json
 import os, sys, io
 from pathlib import Path
@@ -58,9 +50,6 @@ def getConfig():
 
 
 #_________________________________ setup __________________________________
-# config_location = Path(__file__).resolve().parent.parent.parent.parent / "config.json"
-# gui_dir  = os.path.dirname(__file__)
-# app = Flask(__name__,template_folder=os.path.join(gui_dir,"templates"), static_folder=os.path.join(gui_dir,'static'))
 
 try:
     config = getConfig()
