@@ -289,6 +289,20 @@ async function saveTursoConfig() {
   }
 }
 
+async function refreshTableOnly(sku_group) {
+  const groupInput = document.getElementById("sku_group");
+  const group = sku_group || (groupInput ? groupInput.value.trim().toUpperCase() : "");
+  if (!group) return;
+  try {
+    const response = await fetch(`/api/getData/${group}`);
+    const data = await response.json();
+    renderTable(data);
+    scrollToEnd();
+  } catch (error) {
+    console.error("error refreshing table: ", error);
+  }
+}
+
 let isSyncing = false;
 
 async function syncNow() {
@@ -307,6 +321,9 @@ async function syncNow() {
       setSyncStatus('error', msg);
     } else {
       setSyncStatus('ok', `↑${data.pushed} ↓${data.pulled}`);
+      if (data.pulled > 0 || data.pushed > 0) {
+        refreshTableOnly();
+      }
     }
   } catch (e) {
     setSyncStatus('error', '✕ Sync failed');
@@ -318,12 +335,13 @@ async function syncNow() {
   }
 }
 
-
 function setSyncStatus(state, text) {
   const el = document.getElementById('sync-status');
   el.textContent = text;
   el.className = 'sync-status sync-status--' + state;
 }
+
+let lastSeenPullTime = null;
 
 async function pollSyncStatus() {
   try {
@@ -333,8 +351,15 @@ async function pollSyncStatus() {
       const ts = new Date(data.last_push + 'Z').toLocaleTimeString();
       setSyncStatus('ok', `☁ ${ts}`);
     }
+    if (data.last_pull && data.last_pull !== lastSeenPullTime) {
+      if (lastSeenPullTime !== null) {
+        refreshTableOnly();
+      }
+      lastSeenPullTime = data.last_pull;
+    }
   } catch (e) { /* silent */ }
 }
 
 // Poll sync status every 10 seconds
 setInterval(pollSyncStatus, 10000);
+
