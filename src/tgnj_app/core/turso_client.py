@@ -9,7 +9,7 @@ from urllib.error import URLError, HTTPError
 
 class TursoClient:
     def __init__(self, url: str, token: str):
-        self.base_url = url.rstrip('/')
+        self.base_url = url.rstrip('/').replace('libsql://', 'https://')
         self.token = token
         self._pipeline_url = f"{self.base_url}/v2/pipeline"
 
