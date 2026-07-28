@@ -58,7 +58,7 @@ class database:
         
         set_clause = ", ".join([f"{k} = ? " for k in updates.keys()])
         query = f"""
-        UPDATE inventory SET {set_clause}, updated_at = datetime('now') WHERE id = (SELECT id FROM inventory WHERE sku_group = ? AND sku_id = ?);
+        UPDATE inventory SET {set_clause}, updated_at = datetime('now') WHERE sku_group = ? AND sku_id = ? AND COALESCE(is_deleted, 0) = 0;
          """
         params = list(updates.values()) + [sku_group,sku_id]
         
@@ -89,7 +89,7 @@ class database:
 
     def get_item_by_sku(self,sku_group:str,sku_id:int):
         query = """
-        SELECT * FROM inventory where id = (SELECT id FROM inventory WHERE sku_group = ? AND sku_id = ?) AND COALESCE(is_deleted, 0) = 0;
+        SELECT * FROM inventory WHERE sku_group = ? AND sku_id = ? AND COALESCE(is_deleted, 0) = 0;
         """ 
         with self.conn as conn:
             try:
@@ -104,8 +104,9 @@ class database:
 
     def delete_item(self,sku_group: str, sku_id: int):
         query = """
-        UPDATE inventory SET is_deleted = 1, updated_at = datetime('now') WHERE id = (SELECT id FROM inventory WHERE sku_group = ? AND sku_id = ?);
+        UPDATE inventory SET is_deleted = 1, updated_at = datetime('now') WHERE sku_group = ? AND sku_id = ? AND COALESCE(is_deleted, 0) = 0;
         """
+
         curs = None
         with self.conn as conn:
             try:
