@@ -124,6 +124,14 @@ def sync_pull(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> in
     return pulled
 
 
+def purge_old_tombstones(db: 'database', turso: 'TursoClient', days: int = 30) -> int:
+    """Purge tombstones (is_deleted = 1) older than `days` days from remote Turso and local SQLite."""
+    cutoff = f"-{days} days"
+    if hasattr(turso, 'execute'):
+        turso.execute("DELETE FROM inventory WHERE is_deleted = 1 AND updated_at < datetime('now', ?);", [cutoff])
+    return db.purge_old_tombstones(days=days)
+
+
 def sync(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> dict:
     """
     Run a full push-then-pull sync cycle.
@@ -134,8 +142,13 @@ def sync(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> dict:
 
     pushed = sync_push(db, turso, dry_run=dry_run)
     pulled = sync_pull(db, turso, dry_run=dry_run)
+    
+    if not dry_run:
+        purge_old_tombstones(db, turso, days=30)
+
     now = _utcnow()
     return {'pushed': pushed, 'pulled': pulled, 'timestamp': now}
+
 
 
 def initial_sync(db: 'database', turso: 'TursoClient') -> dict:

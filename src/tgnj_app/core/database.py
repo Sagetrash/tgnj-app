@@ -239,5 +239,24 @@ class database:
                 if curs:
                     curs.close()
 
+    def purge_old_tombstones(self, days: int = 30) -> int:
+        """Permanently delete tombstones (is_deleted = 1) older than `days` days."""
+        cutoff = f"-{days} days"
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute(
+                    "DELETE FROM inventory WHERE is_deleted = 1 AND updated_at < datetime('now', ?);",
+                    (cutoff,)
+                )
+                return curs.rowcount
+            except sql.Error as e:
+                print(f"[database] purge_old_tombstones error: {e}")
+                return 0
+            finally:
+                if curs:
+                    curs.close()
+
+
 if __name__ == "__main__":
     pass
