@@ -135,7 +135,7 @@ class database:
     def get_changes_since(self, timestamp: str) -> list[dict]:
         """Return all rows (including soft-deleted) modified after timestamp."""
         query = """
-            SELECT * FROM inventory WHERE updated_at > ? ORDER BY updated_at ASC;
+            SELECT * FROM inventory WHERE updated_at >= ? ORDER BY updated_at ASC;
         """
         with self.conn as conn:
             try:
@@ -161,7 +161,7 @@ class database:
                 curs = conn.cursor()
                 curs.execute(check_query, (row['id'],))
                 existing = curs.fetchone()
-                if existing and existing['updated_at'] and existing['updated_at'] > row.get('updated_at', ''):
+                if existing and existing['updated_at'] and existing['updated_at'] > (row.get('updated_at') or ''):
                     return  # local is newer — skip
                 upsert_query = """
                     INSERT OR REPLACE INTO inventory
