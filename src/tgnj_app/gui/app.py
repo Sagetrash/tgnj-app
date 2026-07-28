@@ -6,6 +6,11 @@ from tgnj_app.core.database import database
 from tgnj_app.core.labelmaker import create_pdf
 from csv import writer
 from tgnj_app.core.legacyUpload import ReadSpecificColumns
+import threading
+import time
+from tgnj_app.core.turso_client import TursoClient
+from tgnj_app.core import sync as sync_engine
+
 
 def get_bundle_path(rel_path):
     if hasattr(sys, '_MEIPASS'):
@@ -27,13 +32,16 @@ app = Flask(
 
 def setConfig(db_path:Path):
     if os.path.exists:
-        Path = str(db_path)
-        config = {
-            "db_Path":Path
-        }
+        db_path_str = str(db_path)
+        try:
+            with open(CONFIG_LOCATION, "r") as f:
+                config = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            config = {}
+        config["db_Path"] = db_path_str
         with open(CONFIG_LOCATION, "w") as f:
             json.dump(config,f)
-        return Path
+        return db_path_str
     else:
         raise FileNotFoundError
 
@@ -43,10 +51,24 @@ def message(string:str)-> dict:
 def getConfig():
     with open(CONFIG_LOCATION,'r') as f:
         config = json.load(f)
-        if not Path(config.get('db_Path')).exists():
+        db_path = config.get('db_Path')
+        if not db_path or not Path(db_path).exists():
             raise FileNotFoundError()
         else:
             return config
+
+def load_turso_config() -> tuple[str | None, str | None, int]:
+    """Read turso_url, turso_token, sync_interval_seconds from Config.json."""
+    try:
+        with open(CONFIG_LOCATION, 'r') as f:
+            config = json.load(f)
+        return (
+            config.get('turso_url'),
+            config.get('turso_token'),
+            int(config.get('sync_interval_seconds', 30))
+        )
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None, None, 30
 
 
 #_________________________________ setup __________________________________
@@ -181,3 +203,56 @@ def addLegacyData():
         return jsonify({'message':"stone added successfully"}),201
     else:
         return jsonify({"message":"error"}), 500
+
+@app.route('/api/getTursoConfig', methods=['GET'])
+def getTursoConfig():
+    turso_url, _, _ = load_turso_config()
+    return jsonify({
+        'configured': bool(turso_url),
+        'turso_url': turso_url or ''
+    }), 200
+
+@app.route('/api/setTursoConfig', methods=['PATCH'])
+def setTursoConfig():
+    global turso_client, sync_thread_started
+    data = request.json
+    turso_url = data.get('turso_url', '').strip()
+    turso_token = data.get('turso_token', '').strip()
+    if not turso_url or not turso_token:
+        return jsonify(message('turso_url and turso_token are required')), 400
+    # Persist to Config.json (merge with existing config)
+    try:
+        with open(CONFIG_LOCATION, 'r') as f:
+            config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        config = {}
+    config['turso_url'] = turso_url
+    config['turso_token'] = turso_token
+    with open(CONFIG_LOCATION, 'w') as f:
+        json.dump(config, f)
+    # Create client and start sync thread if not already started
+    turso_client = TursoClient(turso_url, turso_token)
+    if not sync_thread_started:
+        _, _, interval = load_turso_config()
+        start_sync_loop(interval)
+    return jsonify(message('Turso config saved and sync enabled')), 200
+
+@app.route('/api/runSync', methods=['POST'])
+def runSync():
+    if turso_client is None:
+        return jsonify(message('Turso not configured')), 400
+    try:
+        result = sync_engine.sync(db_instance, turso_client)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify(message(f'Sync error: {e}')), 500
+
+@app.route('/api/getSyncStatus', methods=['GET'])
+def getSyncStatus():
+    last_push = db_instance.get_sync_meta('last_push_time')
+    last_pull = db_instance.get_sync_meta('last_pull_time')
+    return jsonify({
+        'configured': turso_client is not None,
+        'last_push': last_push,
+        'last_pull': last_pull,
+    }), 200
