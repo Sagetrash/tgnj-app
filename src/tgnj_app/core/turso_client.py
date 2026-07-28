@@ -56,7 +56,7 @@ class TursoClient:
                 headers=self._headers(),
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 return json.loads(resp.read().decode())
         except (URLError, HTTPError, TimeoutError, OSError, json.JSONDecodeError) as e:
             print(f"[TursoClient] Warning: {e}")
@@ -86,3 +86,31 @@ class TursoClient:
         except (KeyError, IndexError, TypeError) as e:
             print(f"[TursoClient] Parse error: {e}")
             return None
+
+    def ensure_schema(self) -> bool:
+        """Ensure inventory and _sync_meta tables exist on Turso."""
+        schema_stmts = [
+            {
+                "sql": """
+                CREATE TABLE IF NOT EXISTS inventory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sku_group TEXT NOT NULL,
+                    sku_id INTEGER NOT NULL,
+                    shape TEXT,
+                    weight REAL,
+                    length INTEGER,
+                    width INTEGER,
+                    depth INTEGER,
+                    created_at TEXT DEFAULT '',
+                    updated_at TEXT DEFAULT '',
+                    is_deleted INTEGER DEFAULT 0
+                );
+                """
+            },
+            {
+                "sql": "CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);"
+            }
+        ]
+        res = self.execute_batch(schema_stmts)
+        return res is not None
+

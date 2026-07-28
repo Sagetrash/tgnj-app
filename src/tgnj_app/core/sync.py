@@ -27,6 +27,46 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 
+BATCH_SIZE = 250
+
+
+def _batch_push_rows(turso: 'TursoClient', rows: list[dict]) -> int:
+    """Push a list of row dicts to Turso in batches of 100 using pipeline execution."""
+    pushed = 0
+    for i in range(0, len(rows), BATCH_SIZE):
+        chunk = rows[i:i + BATCH_SIZE]
+        statements = []
+        for row in chunk:
+            if row.get('is_deleted'):
+                statements.append({
+                    "sql": "DELETE FROM inventory WHERE id = ?;",
+                    "args": [row['id']]
+                })
+            else:
+                statements.append({
+                    "sql": """
+                    INSERT OR REPLACE INTO inventory
+                        (id, sku_group, sku_id, shape, weight, length, width, depth,
+                         created_at, updated_at, is_deleted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    "args": [
+                        row.get('id'), row.get('sku_group'), row.get('sku_id'),
+                        row.get('shape'), row.get('weight'), row.get('length'),
+                        row.get('width'), row.get('depth'), row.get('created_at'),
+                        row.get('updated_at'), row.get('is_deleted', 0)
+                    ]
+                })
+
+        res = turso.execute_batch(statements)
+        if res is None:
+            print(f"[sync] Batch push failed at offset {i} — Turso unreachable, aborting push")
+            return pushed
+
+        pushed += len(chunk)
+    return pushed
+
+
 def sync_push(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> int:
     """
     Push local changes to Turso since last push.
@@ -38,43 +78,15 @@ def sync_push(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> in
     if not changes:
         return 0
 
-    pushed = 0
-    for row in changes:
-        if dry_run:
+    if dry_run:
+        for row in changes:
             action = 'DELETE' if row.get('is_deleted') else 'UPSERT'
             print(f"  [dry-run push] {action} id={row.get('id')} sku={row.get('sku_group')}/{row.get('sku_id')} updated_at={row.get('updated_at')}")
-            pushed += 1
-            continue
+        return len(changes)
 
-        if row.get('is_deleted'):
-            # Propagate soft delete to Turso
-            result = turso.execute(
-                "DELETE FROM inventory WHERE id = ?;",
-                [row['id']]
-            )
-        else:
-            result = turso.execute(
-                """
-                INSERT OR REPLACE INTO inventory
-                    (id, sku_group, sku_id, shape, weight, length, width, depth,
-                     created_at, updated_at, is_deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """,
-                [
-                    row.get('id'), row.get('sku_group'), row.get('sku_id'),
-                    row.get('shape'), row.get('weight'), row.get('length'),
-                    row.get('width'), row.get('depth'), row.get('created_at'),
-                    row.get('updated_at'), row.get('is_deleted', 0)
-                ]
-            )
+    pushed = _batch_push_rows(turso, changes)
 
-        if result is None:
-            print(f"[sync] Push failed for id={row.get('id')} — Turso unreachable, aborting push batch")
-            return pushed  # abort — don't update last_push_time
-
-        pushed += 1
-
-    if not dry_run:
+    if pushed == len(changes):
         db.set_sync_meta('last_push_time', _utcnow())
 
     return pushed
@@ -99,13 +111,17 @@ def sync_pull(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> in
         return 0
 
     pulled = 0
+    rows_to_apply = []
     for row in remote_rows:
         if dry_run:
             print(f"  [dry-run pull] id={row.get('id')} sku={row.get('sku_group')}/{row.get('sku_id')} updated_at={row.get('updated_at')}")
             pulled += 1
             continue
-        db.apply_remote_change(row)
+        rows_to_apply.append(row)
         pulled += 1
+
+    if rows_to_apply:
+        db.apply_remote_changes(rows_to_apply)
 
     if not dry_run:
         db.set_sync_meta('last_pull_time', _utcnow())
@@ -118,6 +134,9 @@ def sync(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> dict:
     Run a full push-then-pull sync cycle.
     Returns a result dict: {pushed, pulled, timestamp}.
     """
+    if not dry_run and hasattr(turso, 'ensure_schema'):
+        turso.ensure_schema()
+
     pushed = sync_push(db, turso, dry_run=dry_run)
     pulled = sync_pull(db, turso, dry_run=dry_run)
     now = _utcnow()
@@ -131,6 +150,9 @@ def initial_sync(db: 'database', turso: 'TursoClient') -> dict:
     - Remote only → pull everything from Turso
     - Both have data → merge via last-write-wins sync()
     """
+    if hasattr(turso, 'ensure_schema'):
+        turso.ensure_schema()
+
     local_count = db.get_count()
 
     remote_result = turso.query_rows("SELECT COUNT(*) AS c FROM inventory;")
@@ -144,48 +166,23 @@ def initial_sync(db: 'database', turso: 'TursoClient') -> dict:
         # New device — pull everything
         print(f"[sync] initial_sync: pulling {remote_count} rows from Turso (new device)")
         all_remote = turso.query_rows("SELECT * FROM inventory ORDER BY updated_at ASC;")
-        # Bug fix: abort if Turso fetch failed — don't mark pull as complete
         if all_remote is None:
             print("[sync] initial_sync: Turso unreachable during full pull — aborting")
             return {'pushed': 0, 'pulled': 0, 'timestamp': _utcnow(), 'error': 'turso_unreachable'}
-        for row in all_remote:
-            db.apply_remote_change(row)
+        if all_remote:
+            db.apply_remote_changes(all_remote)
         db.set_sync_meta('last_pull_time', _utcnow())
         db.set_sync_meta('last_push_time', _utcnow())
         return {'pushed': 0, 'pulled': len(all_remote), 'timestamp': _utcnow()}
 
     elif local_count > 0 and remote_count == 0:
-        # First upload — push everything (including soft-deleted rows)
+        # First upload — push everything in batches
         print(f"[sync] initial_sync: pushing {local_count} local rows to Turso (first upload)")
         all_local = db.get_all_items()
-        pushed = 0
-        for row in all_local:
-            # Bug fix: respect soft deletes — send DELETE for is_deleted rows, not upsert
-            if row.get('is_deleted'):
-                result = turso.execute(
-                    "DELETE FROM inventory WHERE id = ?;",
-                    [row['id']]
-                )
-            else:
-                result = turso.execute(
-                    """
-                    INSERT OR REPLACE INTO inventory
-                        (id, sku_group, sku_id, shape, weight, length, width, depth,
-                         created_at, updated_at, is_deleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    [
-                        row.get('id'), row.get('sku_group'), row.get('sku_id'),
-                        row.get('shape'), row.get('weight'), row.get('length'),
-                        row.get('width'), row.get('depth'), row.get('created_at'),
-                        row.get('updated_at'), row.get('is_deleted', 0)
-                    ]
-                )
-            # Bug fix: abort batch on first Turso failure — don't update timestamp
-            if result is None:
-                print(f"[sync] initial_sync: Turso unreachable at id={row.get('id')} — aborting push batch")
-                return {'pushed': pushed, 'pulled': 0, 'timestamp': _utcnow(), 'error': 'turso_unreachable'}
-            pushed += 1
+        pushed = _batch_push_rows(turso, all_local)
+        if pushed < len(all_local):
+            print(f"[sync] initial_sync: Turso push aborted at {pushed}/{len(all_local)} rows")
+            return {'pushed': pushed, 'pulled': 0, 'timestamp': _utcnow(), 'error': 'turso_unreachable'}
         db.set_sync_meta('last_push_time', _utcnow())
         db.set_sync_meta('last_pull_time', _utcnow())
         return {'pushed': pushed, 'pulled': 0, 'timestamp': _utcnow()}
@@ -194,6 +191,7 @@ def initial_sync(db: 'database', turso: 'TursoClient') -> dict:
         # Both have data — merge
         print("[sync] initial_sync: both sides have data, running merge sync")
         return sync(db, turso)
+
 
 
 # ——— CLI entry point ———

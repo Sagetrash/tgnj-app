@@ -83,6 +83,7 @@ except FileNotFoundError as e:
     
 turso_client: TursoClient | None = None
 sync_thread_started: bool = False
+sync_lock = threading.Lock()
 
 def start_sync_loop(interval: int = 30):
     """Start the background sync daemon thread. Idempotent — safe to call multiple times."""
@@ -96,13 +97,15 @@ def start_sync_loop(interval: int = 30):
             time.sleep(interval)
             if turso_client is not None:
                 try:
-                    result = sync_engine.sync(db_instance, turso_client)
-                    print(f"[sync] Auto-sync: pushed={result['pushed']} pulled={result['pulled']}")
+                    with sync_lock:
+                        result = sync_engine.sync(db_instance, turso_client)
+                    print(f"[sync] Auto-sync: pushed={result.get('pushed', 0)} pulled={result.get('pulled', 0)}")
                 except Exception as e:
                     print(f"[sync] Auto-sync error: {e}")
 
     thread = threading.Thread(target=_loop, daemon=True, name='turso-sync')
     thread.start()
+
 
 # Load Turso config at startup if previously configured
 _turso_url, _turso_token, _sync_interval = load_turso_config()
@@ -272,10 +275,14 @@ def runSync():
     if turso_client is None:
         return jsonify(message('Turso not configured')), 400
     try:
-        result = sync_engine.sync(db_instance, turso_client)
+        with sync_lock:
+            result = sync_engine.sync(db_instance, turso_client)
+        if result.get('error'):
+            return jsonify(message(f"Sync error: {result['error']}")), 500
         return jsonify(result), 200
     except Exception as e:
         return jsonify(message(f'Sync error: {e}')), 500
+
 
 @app.route('/api/getSyncStatus', methods=['GET'])
 def getSyncStatus():

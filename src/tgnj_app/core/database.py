@@ -28,7 +28,8 @@ class database:
                 pass
             
             self.conn.execute("CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);")
-            
+            self.conn.execute("UPDATE inventory SET updated_at = datetime('now') WHERE updated_at = '' OR updated_at IS NULL;")
+            self.conn.commit()
 
         except sql.OperationalError as e:
             raise FileNotFoundError(f"Database not found at {self.path}. Details: {e}")
@@ -149,34 +150,34 @@ class database:
                 if curs:
                     curs.close()
 
-    def apply_remote_change(self, row: dict):
+    def apply_remote_changes(self, rows: list[dict]):
         """
-        Upsert a remote row into local SQLite — last-write-wins.
+        Upsert a batch of remote rows into local SQLite — last-write-wins.
         Only writes if remote updated_at >= local updated_at.
         """
-        # Check local updated_at first
         check_query = "SELECT updated_at FROM inventory WHERE id = ?;"
+        upsert_query = """
+            INSERT OR REPLACE INTO inventory
+                (id, sku_group, sku_id, shape, weight, length, width, depth,
+                 created_at, updated_at, is_deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
         with self.conn as conn:
             try:
                 curs = conn.cursor()
-                curs.execute(check_query, (row['id'],))
-                existing = curs.fetchone()
-                if existing and existing['updated_at'] and existing['updated_at'] > (row.get('updated_at') or ''):
-                    return  # local is newer — skip
-                upsert_query = """
-                    INSERT OR REPLACE INTO inventory
-                        (id, sku_group, sku_id, shape, weight, length, width, depth,
-                         created_at, updated_at, is_deleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """
-                curs.execute(upsert_query, (
-                    row.get('id'), row.get('sku_group'), row.get('sku_id'),
-                    row.get('shape'), row.get('weight'), row.get('length'),
-                    row.get('width'), row.get('depth'), row.get('created_at'),
-                    row.get('updated_at'), row.get('is_deleted', 0)
-                ))
+                for row in rows:
+                    curs.execute(check_query, (row['id'],))
+                    existing = curs.fetchone()
+                    if existing and existing['updated_at'] and existing['updated_at'] > (row.get('updated_at') or ''):
+                        continue
+                    curs.execute(upsert_query, (
+                        row.get('id'), row.get('sku_group'), row.get('sku_id'),
+                        row.get('shape'), row.get('weight'), row.get('length'),
+                        row.get('width'), row.get('depth'), row.get('created_at'),
+                        row.get('updated_at'), row.get('is_deleted', 0)
+                    ))
             except sql.Error as e:
-                print(f"[database] apply_remote_change error: {e}")
+                print(f"[database] apply_remote_changes error: {e}")
             finally:
                 if curs:
                     curs.close()

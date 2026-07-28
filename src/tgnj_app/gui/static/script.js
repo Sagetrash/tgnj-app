@@ -289,27 +289,35 @@ async function saveTursoConfig() {
   }
 }
 
+let isSyncing = false;
+
 async function syncNow() {
+  if (isSyncing) return;
+  isSyncing = true;
   const btn = document.getElementById('sync-btn');
   btn.textContent = 'Syncing...';
   btn.style.opacity = '0.6';
+  btn.style.pointerEvents = 'none';
+
   try {
     const res = await fetch('/api/runSync', { method: 'POST' });
-    if (!res.ok) {
-      setSyncStatus('error', '✕ Turso not configured');
-      btn.textContent = 'Sync';
-      btn.style.opacity = '1';
-      return;
-    }
     const data = await res.json();
-    setSyncStatus('ok', `↑${data.pushed} ↓${data.pulled}`);
+    if (!res.ok) {
+      const msg = data && data.message ? data.message : '✕ Sync failed';
+      setSyncStatus('error', msg);
+    } else {
+      setSyncStatus('ok', `↑${data.pushed} ↓${data.pulled}`);
+    }
   } catch (e) {
     setSyncStatus('error', '✕ Sync failed');
   } finally {
+    isSyncing = false;
     btn.textContent = 'Sync';
     btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
   }
 }
+
 
 function setSyncStatus(state, text) {
   const el = document.getElementById('sync-status');
