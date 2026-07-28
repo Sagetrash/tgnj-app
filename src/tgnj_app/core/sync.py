@@ -144,36 +144,48 @@ def initial_sync(db: 'database', turso: 'TursoClient') -> dict:
         # New device — pull everything
         print(f"[sync] initial_sync: pulling {remote_count} rows from Turso (new device)")
         all_remote = turso.query_rows("SELECT * FROM inventory ORDER BY updated_at ASC;")
-        if all_remote:
-            for row in all_remote:
-                db.apply_remote_change(row)
-        pulled = len(all_remote) if all_remote else 0
+        # Bug fix: abort if Turso fetch failed — don't mark pull as complete
+        if all_remote is None:
+            print("[sync] initial_sync: Turso unreachable during full pull — aborting")
+            return {'pushed': 0, 'pulled': 0, 'timestamp': _utcnow(), 'error': 'turso_unreachable'}
+        for row in all_remote:
+            db.apply_remote_change(row)
         db.set_sync_meta('last_pull_time', _utcnow())
         db.set_sync_meta('last_push_time', _utcnow())
-        return {'pushed': 0, 'pulled': pulled, 'timestamp': _utcnow()}
+        return {'pushed': 0, 'pulled': len(all_remote), 'timestamp': _utcnow()}
 
     elif local_count > 0 and remote_count == 0:
-        # First upload — push everything
+        # First upload — push everything (including soft-deleted rows)
         print(f"[sync] initial_sync: pushing {local_count} local rows to Turso (first upload)")
         all_local = db.get_all_items()
         pushed = 0
         for row in all_local:
-            result = turso.execute(
-                """
-                INSERT OR REPLACE INTO inventory
-                    (id, sku_group, sku_id, shape, weight, length, width, depth,
-                     created_at, updated_at, is_deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """,
-                [
-                    row.get('id'), row.get('sku_group'), row.get('sku_id'),
-                    row.get('shape'), row.get('weight'), row.get('length'),
-                    row.get('width'), row.get('depth'), row.get('created_at'),
-                    row.get('updated_at'), row.get('is_deleted', 0)
-                ]
-            )
-            if result is not None:
-                pushed += 1
+            # Bug fix: respect soft deletes — send DELETE for is_deleted rows, not upsert
+            if row.get('is_deleted'):
+                result = turso.execute(
+                    "DELETE FROM inventory WHERE id = ?;",
+                    [row['id']]
+                )
+            else:
+                result = turso.execute(
+                    """
+                    INSERT OR REPLACE INTO inventory
+                        (id, sku_group, sku_id, shape, weight, length, width, depth,
+                         created_at, updated_at, is_deleted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    [
+                        row.get('id'), row.get('sku_group'), row.get('sku_id'),
+                        row.get('shape'), row.get('weight'), row.get('length'),
+                        row.get('width'), row.get('depth'), row.get('created_at'),
+                        row.get('updated_at'), row.get('is_deleted', 0)
+                    ]
+                )
+            # Bug fix: abort batch on first Turso failure — don't update timestamp
+            if result is None:
+                print(f"[sync] initial_sync: Turso unreachable at id={row.get('id')} — aborting push batch")
+                return {'pushed': pushed, 'pulled': 0, 'timestamp': _utcnow(), 'error': 'turso_unreachable'}
+            pushed += 1
         db.set_sync_meta('last_push_time', _utcnow())
         db.set_sync_meta('last_pull_time', _utcnow())
         return {'pushed': pushed, 'pulled': 0, 'timestamp': _utcnow()}
