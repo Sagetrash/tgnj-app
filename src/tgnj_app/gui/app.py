@@ -81,6 +81,33 @@ except FileNotFoundError as e:
     print(e)
     setConfig(Path(''))
     
+turso_client: TursoClient | None = None
+sync_thread_started: bool = False
+
+def start_sync_loop(interval: int = 30):
+    """Start the background sync daemon thread. Safe to call once only."""
+    global sync_thread_started
+    sync_thread_started = True
+
+    def _loop():
+        while True:
+            time.sleep(interval)
+            if turso_client is not None:
+                try:
+                    result = sync_engine.sync(db_instance, turso_client)
+                    print(f"[sync] Auto-sync: pushed={result['pushed']} pulled={result['pulled']}")
+                except Exception as e:
+                    print(f"[sync] Auto-sync error: {e}")
+
+    thread = threading.Thread(target=_loop, daemon=True, name='turso-sync')
+    thread.start()
+
+# Load Turso config at startup if previously configured
+_turso_url, _turso_token, _sync_interval = load_turso_config()
+if _turso_url and _turso_token:
+    turso_client = TursoClient(_turso_url, _turso_token)
+    start_sync_loop(_sync_interval)
+    print(f"[sync] Auto-sync enabled (interval={_sync_interval}s)")
 
 # ________________________ ROUTES ______________________
 @app.route('/')
