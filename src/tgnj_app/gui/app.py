@@ -85,8 +85,10 @@ turso_client: TursoClient | None = None
 sync_thread_started: bool = False
 
 def start_sync_loop(interval: int = 30):
-    """Start the background sync daemon thread. Safe to call once only."""
+    """Start the background sync daemon thread. Idempotent — safe to call multiple times."""
     global sync_thread_started
+    if sync_thread_started:
+        return
     sync_thread_started = True
 
     def _loop():
