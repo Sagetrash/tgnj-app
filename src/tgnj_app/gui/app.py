@@ -125,6 +125,19 @@ def getData(sku_group:str):
     cleanData = [dict(row) for row in data]
     return jsonify(cleanData),201
 
+def trigger_async_sync():
+    """Trigger a non-blocking background sync cycle when data is added/edited/deleted."""
+    def _async():
+        if turso_client is not None:
+            try:
+                with sync_lock:
+                    result = sync_engine.sync(db_instance, turso_client)
+                print(f"[sync] Action-sync: pushed={result.get('pushed', 0)} pulled={result.get('pulled', 0)}")
+            except Exception as e:
+                print(f"[sync] Action-sync error: {e}")
+    threading.Thread(target=_async, daemon=True, name='action-sync').start()
+
+
 @app.route('/api/addItem',methods=['POST'])
 def addItem():
     data = request.json
@@ -140,6 +153,7 @@ def addItem():
     success = db_instance.add_item(sku_group=sku_group,sku_id=sku_id,shape=shape,weight=weight,length=length,width=width,depth=depth)
 
     if success:
+        trigger_async_sync()
         return jsonify({'message':"stone added successfully"}),201
     else:
         return jsonify({"message":"error"}), 500
@@ -148,6 +162,7 @@ def addItem():
 def deleteItem(sku_group:str,sku_id:int):
     success = db_instance.delete_item(sku_group=sku_group,sku_id=sku_id)
     if success:
+        trigger_async_sync()
         return jsonify(message("deleted item successfully")), 201
     else:
         return jsonify(message("Error deleting item")), 500
@@ -157,9 +172,11 @@ def editItems(group,id):
     data = request.json
     success = db_instance.edit_item(sku_group=group,sku_id=id, **data)
     if success:
+        trigger_async_sync()
         return jsonify(message("updated item successfully")), 201
     else:
         return jsonify(message("failute updating items")), 500
+
 
 @app.route('/api/setDbPath',methods=["PATCH"])
 def setDbPath():

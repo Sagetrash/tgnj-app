@@ -28,8 +28,10 @@ class database:
                 pass
             
             self.conn.execute("CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_inventory_updated_at ON inventory(updated_at);")
             self.conn.execute("UPDATE inventory SET updated_at = datetime('now') WHERE updated_at = '' OR updated_at IS NULL;")
             self.conn.commit()
+
 
         except sql.OperationalError as e:
             raise FileNotFoundError(f"Database not found at {self.path}. Details: {e}")
