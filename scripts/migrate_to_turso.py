@@ -21,7 +21,7 @@ from tgnj_app.core.turso_client import TursoClient
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def migrate(db_path: str, turso_url: str, turso_token: str):

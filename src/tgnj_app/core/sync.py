@@ -23,8 +23,8 @@ _EPOCH = '1970-01-01T00:00:00'
 
 
 def _utcnow() -> str:
-    """Return current UTC time as ISO-8601 string (no microseconds)."""
-    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+    """Return current UTC time (matching SQLite datetime format)."""
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def sync_push(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> int:
