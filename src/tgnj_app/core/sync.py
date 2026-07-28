@@ -37,26 +37,21 @@ def _batch_push_rows(turso: 'TursoClient', rows: list[dict]) -> int:
         chunk = rows[i:i + BATCH_SIZE]
         statements = []
         for row in chunk:
-            if row.get('is_deleted'):
-                statements.append({
-                    "sql": "DELETE FROM inventory WHERE id = ?;",
-                    "args": [row['id']]
-                })
-            else:
-                statements.append({
-                    "sql": """
-                    INSERT OR REPLACE INTO inventory
-                        (id, sku_group, sku_id, shape, weight, length, width, depth,
-                         created_at, updated_at, is_deleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    "args": [
-                        row.get('id'), row.get('sku_group'), row.get('sku_id'),
-                        row.get('shape'), row.get('weight'), row.get('length'),
-                        row.get('width'), row.get('depth'), row.get('created_at'),
-                        row.get('updated_at'), row.get('is_deleted', 0)
-                    ]
-                })
+            statements.append({
+                "sql": """
+                INSERT OR REPLACE INTO inventory
+                    (id, sku_group, sku_id, shape, weight, length, width, depth,
+                     created_at, updated_at, is_deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                "args": [
+                    row.get('id'), row.get('sku_group'), row.get('sku_id'),
+                    row.get('shape'), row.get('weight'), row.get('length'),
+                    row.get('width'), row.get('depth'), row.get('created_at'),
+                    row.get('updated_at'), row.get('is_deleted', 0)
+                ]
+            })
+
 
         res = turso.execute_batch(statements)
         if res is None:
