@@ -36,9 +36,10 @@ class TursoClient:
                     "stmt": {
                         "sql": stmt["sql"],
                         "args": [
-                            {"type": "text", "value": str(a)} if not isinstance(a, (int, float)) else
-                            ({"type": "integer", "value": str(int(a))} if isinstance(a, int) else
-                             {"type": "float", "value": str(a)})
+                            {"type": "null", "value": None} if a is None else
+                            ({"type": "float", "value": float(a)} if isinstance(a, float) else
+                             ({"type": "integer", "value": str(int(a))} if isinstance(a, int) else
+                              {"type": "text", "value": str(a)}))
                             for a in (stmt.get("args") or [])
                         ],
                     },
