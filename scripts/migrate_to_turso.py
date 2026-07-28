@@ -30,8 +30,8 @@ def migrate(db_path: str, turso_url: str, turso_token: str):
 
     # 1. Idempotent schema migration — add sync columns if missing
     for col, definition in [
-        ('created_at', "TEXT DEFAULT (datetime('now'))"),
-        ('updated_at', "TEXT DEFAULT (datetime('now'))"),
+        ('created_at', "TEXT DEFAULT ''"),
+        ('updated_at', "TEXT DEFAULT ''"),
         ('is_deleted', 'INTEGER DEFAULT 0'),
     ]:
         try:
@@ -44,7 +44,7 @@ def migrate(db_path: str, turso_url: str, turso_token: str):
     # 2. Backfill NULL timestamps on existing rows
     now = _utcnow()
     conn.execute(
-        "UPDATE inventory SET created_at = ?, updated_at = ? WHERE created_at IS NULL",
+        "UPDATE inventory SET created_at = ?, updated_at = ? WHERE created_at IS NULL OR created_at = ''",
         (now, now)
     )
     conn.execute(

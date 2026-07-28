@@ -15,11 +15,11 @@ class database:
             self.conn.row_factory = sql.Row
             
             try:
-                self.conn.execute("ALTER TABLE inventory ADD COLUMN created_at TEXT DEFAULT (datetime('now'))")
+                self.conn.execute("ALTER TABLE inventory ADD COLUMN created_at TEXT DEFAULT ''")
             except sql.OperationalError:
                 pass
             try:
-                self.conn.execute("ALTER TABLE inventory ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))")
+                self.conn.execute("ALTER TABLE inventory ADD COLUMN updated_at TEXT DEFAULT ''")
             except sql.OperationalError:
                 pass
             try:
