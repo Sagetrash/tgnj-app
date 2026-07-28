@@ -235,10 +235,11 @@ def addLegacyData():
 
 @app.route('/api/getTursoConfig', methods=['GET'])
 def getTursoConfig():
-    turso_url, _, _ = load_turso_config()
+    turso_url, turso_token, _ = load_turso_config()
     return jsonify({
         'configured': bool(turso_url),
-        'turso_url': turso_url or ''
+        'turso_url': turso_url or '',
+        'turso_token': turso_token or ''
     }), 200
 
 @app.route('/api/setTursoConfig', methods=['PATCH'])

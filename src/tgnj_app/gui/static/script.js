@@ -260,6 +260,9 @@ async function loadTursoConfig() {
     if (data.turso_url) {
       document.getElementById('turso_url').value = data.turso_url;
     }
+    if (data.turso_token) {
+      document.getElementById('turso_token').value = data.turso_token;
+    }
     if (data.configured) {
       setSyncStatus('configured', '☁ Sync enabled');
     } else {
