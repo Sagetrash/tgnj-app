@@ -234,3 +234,40 @@ header {
   background-color: #fab95b;
   border-color: #e8e2db;
 }
+
+/* ── Turso Sync UI ─────────────────────────────── */
+.turso-config {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.turso-input {
+  background: transparent;
+  border: 1px solid #fab95b55;
+  border-radius: 4px;
+  color: #e8e2db;
+  font-size: 0.75rem;
+  padding: 3px 7px;
+  width: 150px;
+  transition: border-color 0.15s;
+}
+
+.turso-input:focus {
+  outline: none;
+  border-color: #fab95b;
+}
+
+.turso-input::placeholder {
+  color: #e8e2db88;
+}
+
+.sync-status {
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.sync-status--ok    { color: #6fcf97; }
+.sync-status--error { color: #eb5757; }
+.sync-status--configured { color: #fab95b; }
+.sync-status--idle  { color: transparent; }

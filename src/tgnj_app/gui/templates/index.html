@@ -24,6 +24,24 @@
           contenteditable="true"
         ></p>
       </div>
+      <div class="turso-config" id="turso-config">
+        <input
+          type="text"
+          id="turso_url"
+          class="turso-input"
+          placeholder="Turso URL"
+          onblur="saveTursoConfig()"
+        />
+        <input
+          type="password"
+          id="turso_token"
+          class="turso-input"
+          placeholder="Turso Token"
+          onblur="saveTursoConfig()"
+        />
+        <span id="sync-status" class="sync-status"></span>
+        <span class="button" id="sync-btn" onclick="syncNow()">Sync</span>
+      </div>
       <span class="button" onclick="extractData()" id="extract-btn"
         >Extract Data</span
       >

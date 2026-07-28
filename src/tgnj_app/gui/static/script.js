@@ -240,6 +240,7 @@ async function extractData() {
 
 window.onload = () => {
   getDbPath();
+  loadTursoConfig();
   setupKeyboardNavigation();
   group = document.getElementById("sku_group").value;
   if (!group || group.length === 0) {
@@ -249,3 +250,80 @@ window.onload = () => {
     document.getElementById("weight").focus();
   }
 };
+
+// ── Turso Sync UI ────────────────────────────────────────────────
+
+async function loadTursoConfig() {
+  try {
+    const res = await fetch('/api/getTursoConfig');
+    const data = await res.json();
+    if (data.turso_url) {
+      document.getElementById('turso_url').value = data.turso_url;
+    }
+    if (data.configured) {
+      setSyncStatus('configured', '☁ Sync enabled');
+    } else {
+      setSyncStatus('idle', '');
+    }
+  } catch (e) {
+    console.error('loadTursoConfig error:', e);
+  }
+}
+
+async function saveTursoConfig() {
+  const url = document.getElementById('turso_url').value.trim();
+  const token = document.getElementById('turso_token').value.trim();
+  if (!url || !token) return;  // don't save incomplete config
+  try {
+    await fetch('/api/setTursoConfig', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turso_url: url, turso_token: token }),
+    });
+    setSyncStatus('configured', '☁ Sync enabled');
+  } catch (e) {
+    console.error('saveTursoConfig error:', e);
+  }
+}
+
+async function syncNow() {
+  const btn = document.getElementById('sync-btn');
+  btn.textContent = 'Syncing...';
+  btn.style.opacity = '0.6';
+  try {
+    const res = await fetch('/api/runSync', { method: 'POST' });
+    if (!res.ok) {
+      setSyncStatus('error', '✕ Turso not configured');
+      btn.textContent = 'Sync';
+      btn.style.opacity = '1';
+      return;
+    }
+    const data = await res.json();
+    setSyncStatus('ok', `↑${data.pushed} ↓${data.pulled}`);
+  } catch (e) {
+    setSyncStatus('error', '✕ Sync failed');
+  } finally {
+    btn.textContent = 'Sync';
+    btn.style.opacity = '1';
+  }
+}
+
+function setSyncStatus(state, text) {
+  const el = document.getElementById('sync-status');
+  el.textContent = text;
+  el.className = 'sync-status sync-status--' + state;
+}
+
+async function pollSyncStatus() {
+  try {
+    const res = await fetch('/api/getSyncStatus');
+    const data = await res.json();
+    if (data.configured && data.last_push) {
+      const ts = new Date(data.last_push + 'Z').toLocaleTimeString();
+      setSyncStatus('ok', `☁ ${ts}`);
+    }
+  } catch (e) { /* silent */ }
+}
+
+// Poll sync status every 10 seconds
+setInterval(pollSyncStatus, 10000);
