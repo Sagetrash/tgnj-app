@@ -109,8 +109,12 @@ class TursoClient:
             },
             {
                 "sql": "CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);"
+            },
+            {
+                "sql": "CREATE INDEX IF NOT EXISTS idx_inventory_updated_at ON inventory(updated_at);"
             }
         ]
         res = self.execute_batch(schema_stmts)
         return res is not None
+
 
