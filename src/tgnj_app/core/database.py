@@ -175,35 +175,57 @@ class database:
 
     def apply_remote_changes(self, rows: list[dict]):
         """
-        Upsert a batch of remote rows into local SQLite — last-write-wins.
+        Upsert a batch of remote rows into local SQLite — matched by natural key (sku_group, sku_id).
         Only writes if remote updated_at >= local updated_at.
         """
-        check_query = "SELECT updated_at FROM inventory WHERE id = ?;"
-        upsert_query = """
-            INSERT OR REPLACE INTO inventory
-                (id, sku_group, sku_id, shape, weight, length, width, depth,
+        check_query = "SELECT id, updated_at FROM inventory WHERE sku_group = ? AND sku_id = ?;"
+        update_query = """
+            UPDATE inventory SET
+                shape = ?, weight = ?, length = ?, width = ?, depth = ?,
+                created_at = ?, updated_at = ?, is_deleted = ?
+            WHERE id = ?;
+        """
+        insert_query = """
+            INSERT INTO inventory
+                (sku_group, sku_id, shape, weight, length, width, depth,
                  created_at, updated_at, is_deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         with self.conn as conn:
             try:
                 curs = conn.cursor()
                 for row in rows:
-                    curs.execute(check_query, (row['id'],))
-                    existing = curs.fetchone()
-                    if existing and existing['updated_at'] and existing['updated_at'] > (row.get('updated_at') or ''):
+                    sku_group = row.get('sku_group')
+                    sku_id = row.get('sku_id')
+                    if not sku_group or sku_id is None:
                         continue
-                    curs.execute(upsert_query, (
-                        row.get('id'), row.get('sku_group'), row.get('sku_id'),
-                        row.get('shape'), row.get('weight'), row.get('length'),
-                        row.get('width'), row.get('depth'), row.get('created_at'),
-                        row.get('updated_at'), row.get('is_deleted', 0)
-                    ))
+
+                    curs.execute(check_query, (sku_group, sku_id))
+                    existing = curs.fetchone()
+
+                    if existing:
+                        # Skip if local timestamp is strictly newer
+                        if existing['updated_at'] and existing['updated_at'] > (row.get('updated_at') or ''):
+                            continue
+
+                        curs.execute(update_query, (
+                            row.get('shape'), row.get('weight'), row.get('length'),
+                            row.get('width'), row.get('depth'), row.get('created_at'),
+                            row.get('updated_at'), row.get('is_deleted', 0),
+                            existing['id']
+                        ))
+                    else:
+                        curs.execute(insert_query, (
+                            sku_group, sku_id, row.get('shape'), row.get('weight'),
+                            row.get('length'), row.get('width'), row.get('depth'),
+                            row.get('created_at'), row.get('updated_at'), row.get('is_deleted', 0)
+                        ))
             except sql.Error as e:
                 print(f"[database] apply_remote_changes error: {e}")
             finally:
                 if curs:
                     curs.close()
+
 
     def get_sync_meta(self, key: str) -> str | None:
         """Read a value from _sync_meta table."""
