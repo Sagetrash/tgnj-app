@@ -38,21 +38,41 @@ class database:
         except sql.DatabaseError as e:
             raise e
     
-    def add_item(self,sku_group,sku_id,shape,weight,length,width,depth):
-        query = """
-        INSERT INTO inventory (sku_group,sku_id,shape,weight,length,width,depth,created_at,updated_at) VALUES (?,?,?,?,?,?,?,datetime('now'),datetime('now'));
-        """
+    def add_item(self, sku_group, sku_id, shape, weight, length, width, depth):
+        check_query = "SELECT id, is_deleted FROM inventory WHERE sku_group = ? AND sku_id = ?;"
         curs = None
         with self.conn as conn:
             try:
                 curs = conn.cursor()
-                curs.execute(query,(sku_group,sku_id,shape,weight,length,width,depth))
+                curs.execute(check_query, (sku_group, sku_id))
+                existing = curs.fetchone()
+
+                if existing:
+                    # Reactivate existing row and update attributes
+                    update_query = """
+                    UPDATE inventory SET
+                        shape = ?, weight = ?, length = ?, width = ?, depth = ?,
+                        is_deleted = 0, updated_at = datetime('now')
+                    WHERE id = ?;
+                    """
+                    curs.execute(update_query, (shape, weight, length, width, depth, existing['id']))
+                else:
+                    # Insert new row
+                    insert_query = """
+                    INSERT INTO inventory
+                        (sku_group, sku_id, shape, weight, length, width, depth, created_at, updated_at, is_deleted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0);
+                    """
+                    curs.execute(insert_query, (sku_group, sku_id, shape, weight, length, width, depth))
+
                 return True
-            except sql.Error:
+            except sql.Error as e:
+                print(f"[database] add_item error: {e}")
                 return False
             finally:
                 if curs:
                     curs.close()
+
 
     def edit_item(self,sku_group:str,sku_id:int,shape:str=None,weight:float=None,length:int=None,width:int=None,depth:int=None):
         allparams = locals()
