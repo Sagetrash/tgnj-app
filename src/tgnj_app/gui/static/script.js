@@ -298,10 +298,19 @@ async function refreshTableOnly(sku_group) {
     const data = await response.json();
     renderTable(data);
     scrollToEnd();
+
+    // Auto-update next available item_id if user is NOT currently typing in form fields
+    const isFormFocused = formOrder.some(
+      (id) => document.activeElement && document.activeElement.id === id
+    );
+    if (!isFormFocused) {
+      setItemId(data);
+    }
   } catch (error) {
     console.error("error refreshing table: ", error);
   }
 }
+
 
 let isSyncing = false;
 
