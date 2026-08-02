@@ -985,57 +985,102 @@ def bulkPush():
     chunk_odd = items[1::2]
     chunks = [c for c in [chunk_even, chunk_odd] if len(c) > 0]
 
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=max(1, len(chunks))) as executor:
-        batch_outputs = list(executor.map(process_chunk, chunks))
+    import queue
+    import json
+    from flask import Response, stream_with_context
 
-    item_results = [res for chunk in batch_outputs for res in chunk]
+    q = queue.Queue()
+    completed_counter = [0]
 
-    for res in item_results:
-        if not res:
-            continue
-        if res.get("is_success"):
-            success += 1
-            if "t_draft" in res: draft_times.append(res["t_draft"])
-            if "t_inv" in res: inv_times.append(res["t_inv"])
-            if "t_photos" in res: photo_times.append(res["t_photos"])
-            results.append({
-                "sku": res["sku"],
-                "listing_id": res["listing_id"],
-                "status": "success",
-                "duration_sec": res["duration_sec"]
-            })
-        else:
-            if res.get("status") == "skipped":
-                results.append({"sku": res["sku"], "listing_id": res.get("listing_id"), "error": res.get("error"), "status": "skipped"})
+    def process_chunk(item_list):
+        for req_item in item_list:
+            res = process_single_item(req_item)
+            if res:
+                completed_counter[0] += 1
+                q.put((completed_counter[0], res))
+        q.put(None) # Signal thread chunk finished
+
+    @stream_with_context
+    def generate():
+        nonlocal success, failed
+        from concurrent.futures import ThreadPoolExecutor
+        executor = ThreadPoolExecutor(max_workers=max(1, len(chunks)))
+        for c in chunks:
+            executor.submit(process_chunk, c)
+
+        finished_chunks = 0
+        expected_chunks = len(chunks)
+
+        while finished_chunks < expected_chunks:
+            msg = q.get()
+            if msg is None:
+                finished_chunks += 1
+                continue
+            
+            comp_count, res = msg
+            if res.get("is_success"):
+                success += 1
+                if "t_draft" in res: draft_times.append(res["t_draft"])
+                if "t_inv" in res: inv_times.append(res["t_inv"])
+                if "t_photos" in res: photo_times.append(res["t_photos"])
+                results.append({
+                    "sku": res["sku"],
+                    "listing_id": res["listing_id"],
+                    "status": "success",
+                    "duration_sec": res["duration_sec"]
+                })
             else:
-                failed += 1
-                results.append({"sku": res["sku"], "error": res.get("error"), "status": "failed"})
+                if res.get("status") == "skipped":
+                    results.append({"sku": res["sku"], "listing_id": res.get("listing_id"), "error": res.get("error"), "status": "skipped"})
+                else:
+                    failed += 1
+                    results.append({"sku": res["sku"], "error": res.get("error"), "status": "failed"})
 
-    total_batch_duration = time.perf_counter() - batch_start_time
-    avg_per_item = (total_batch_duration / success) if success > 0 else 0
-    avg_draft = (sum(draft_times) / len(draft_times)) if draft_times else 0
-    avg_inv = (sum(inv_times) / len(inv_times)) if inv_times else 0
-    avg_photos = (sum(photo_times) / len(photo_times)) if photo_times else 0
-
-    print(f"[bulkPush] BATCH COMPLETE: Pushed {success}/{total} items in {total_batch_duration:.2f}s (avg {avg_per_item:.2f}s/item)")
-    print(f"[bulkPush] Averages: Draft creation = {avg_draft:.2f}s | SKU inventory = {avg_inv:.2f}s | Photo uploads = {avg_photos:.2f}s")
-
-    if success > 0:
-        trigger_async_sync()
-
-    return jsonify({
-        "total": total,
-        "success": success,
-        "failed": failed,
-        "metrics": {
-            "total_duration_sec": round(total_batch_duration, 2),
-            "avg_sec_per_item": round(avg_per_item, 2),
-            "step_averages_sec": {
-                "draft_creation": round(avg_draft, 2),
-                "sku_assignment": round(avg_inv, 2),
-                "photo_uploads": round(avg_photos, 2)
+            # Yield live progress NDJSON event
+            event_data = {
+                "type": "progress",
+                "completed": comp_count,
+                "total": total,
+                "sku": res.get("sku"),
+                "listing_id": res.get("listing_id"),
+                "status": res.get("status"),
+                "duration_sec": res.get("duration_sec", 0),
+                "t_draft": round(res.get("t_draft", 0), 2),
+                "t_inv": round(res.get("t_inv", 0), 2),
+                "t_photos": round(res.get("t_photos", 0), 2),
+                "error": res.get("error", "")
             }
-        },
-        "results": results
-    }), 200
+            yield json.dumps(event_data) + "\n"
+
+        executor.shutdown(wait=True)
+
+        total_batch_duration = time.perf_counter() - batch_start_time
+        avg_per_item = (total_batch_duration / success) if success > 0 else 0
+        avg_draft = (sum(draft_times) / len(draft_times)) if draft_times else 0
+        avg_inv = (sum(inv_times) / len(inv_times)) if inv_times else 0
+        avg_photos = (sum(photo_times) / len(photo_times)) if photo_times else 0
+
+        print(f"[bulkPush] BATCH COMPLETE: Pushed {success}/{total} items in {total_batch_duration:.2f}s (avg {avg_per_item:.2f}s/item)")
+
+        if success > 0:
+            trigger_async_sync()
+
+        complete_event = {
+            "type": "complete",
+            "total": total,
+            "success": success,
+            "failed": failed,
+            "metrics": {
+                "total_duration_sec": round(total_batch_duration, 2),
+                "avg_sec_per_item": round(avg_per_item, 2),
+                "step_averages_sec": {
+                    "draft_creation": round(avg_draft, 2),
+                    "sku_assignment": round(avg_inv, 2),
+                    "photo_uploads": round(avg_photos, 2)
+                }
+            },
+            "results": results
+        }
+        yield json.dumps(complete_event) + "\n"
+
+    return Response(generate(), mimetype='application/x-ndjson')

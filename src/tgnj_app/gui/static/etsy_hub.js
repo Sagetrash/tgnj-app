@@ -259,35 +259,63 @@ async function runBulkPublisher() {
       body: JSON.stringify({ items, gemstone_name, price, custom_description, primary_color })
     });
     
-    if (res.ok) {
-        const data = await res.json();
-        const successCount = data.success || 0;
-        const totalCount = data.total || items.length;
-        if (progressBar) progressBar.style.width = '100%';
-        if (progressText) progressText.textContent = `Done ${successCount}/${totalCount}`;
-        
-        appendLog(`Done ${successCount}/${totalCount} items published successfully!`, 'success');
-        if (data.metrics) {
-            const m = data.metrics;
-            appendLog(`⚡ Benchmarks: ${m.total_duration_sec}s total (avg ${m.avg_sec_per_item}s/item) | Draft: ${m.step_averages_sec.draft_creation}s | SKU: ${m.step_averages_sec.sku_assignment}s | Photos: ${m.step_averages_sec.photo_uploads}s`, 'info');
-        }
-        
-        if (data.results) {
-            data.results.forEach(result => {
-               if (result.status === 'success') {
-                   const duration = result.duration_sec ? ` (${result.duration_sec}s)` : '';
-                   appendLog(`[SUCCESS] ${result.sku} -> Draft #${result.listing_id} created${duration}`, 'success');
-               } else if (result.status === 'skipped') {
-                   appendLog(`[INFO] ${result.sku} -> Already listed on Etsy (Draft #${result.listing_id || 'exist'})`, 'info');
-               } else {
-                   appendLog(`[ERROR] ${result.sku} -> ${result.error || 'Unknown error'}`, 'error');
-               }
-            });
-        }
-    } else {
+    if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         appendLog(`Server returned error: ${res.status} ${errorData.error || ''}`, 'error');
         if (progressText) progressText.textContent = 'Error during bulk push.';
+        return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep trailing unparsed buffer fragment
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                const evt = JSON.parse(line);
+                if (evt.type === 'progress') {
+                    const completed = evt.completed || 0;
+                    const totalCount = evt.total || items.length;
+                    const percent = Math.min(100, Math.round((completed / totalCount) * 100));
+                    const remainingItems = totalCount - completed;
+                    // Calculate remaining time: 2 parallel workers at ~15s per item pace (~7.5s per item effective pace)
+                    const remainingSec = Math.ceil(remainingItems / 2) * 15;
+                    
+                    if (progressBar) progressBar.style.width = `${percent}%`;
+                    if (progressText) {
+                        if (remainingItems > 0) {
+                            progressText.textContent = `Done ${completed}/${totalCount} (~${remainingSec}s remaining)`;
+                        } else {
+                            progressText.textContent = `Done ${completed}/${totalCount}`;
+                        }
+                    }
+
+                    if (evt.status === 'success') {
+                        appendLog(`[SUCCESS] ${evt.sku} -> Draft #${evt.listing_id} created (${evt.duration_sec}s | Draft: ${evt.t_draft}s | SKU: ${evt.t_inv}s | Photos: ${evt.t_photos}s)`, 'success');
+                    } else if (evt.status === 'skipped') {
+                        appendLog(`[INFO] ${evt.sku} -> Already listed on Etsy`, 'info');
+                    } else {
+                        appendLog(`[ERROR] ${evt.sku} -> ${evt.error || 'Failed'}`, 'error');
+                    }
+                } else if (evt.type === 'complete') {
+                    if (progressBar) progressBar.style.width = '100%';
+                    if (progressText) progressText.textContent = `Done ${evt.success}/${evt.total}`;
+                    appendLog(`⚡ Batch Complete: ${evt.success}/${evt.total} items published in ${evt.metrics.total_duration_sec}s (avg ${evt.metrics.avg_sec_per_item}s/item)`, 'success');
+                    if (typeof loadBulkPreview === 'function') loadBulkPreview();
+                }
+            } catch (err) {
+                console.error("NDJSON parse error:", err);
+            }
+        }
     }
   } catch (e) {
     console.log("Error running bulk publisher:", e);
