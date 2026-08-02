@@ -227,23 +227,30 @@ class EtsyClient:
             print(f"[etsy_client] create_draft_listing exception: {e}")
             raise e
 
-    def update_listing_inventory(self, access_token: str, listing_id: str, sku: str, price: float, quantity: int = 1) -> dict:
+    def update_listing_inventory(self, access_token: str, listing_id: str, sku: str, price: float, quantity: int = 1, readiness_state_id: int = None) -> dict:
         """
         Updates the product inventory for an Etsy listing to assign its SKU and price.
         Sends PUT /v3/application/listings/{listing_id}/inventory.
         """
+        if not readiness_state_id:
+            states = self.get_readiness_states(access_token)
+            if states:
+                readiness_state_id = states[0].get("readiness_state_id")
+
+        offering = {
+            "price": float(price),
+            "quantity": int(quantity),
+            "is_enabled": True
+        }
+        if readiness_state_id:
+            offering["readiness_state_id"] = readiness_state_id
+
         url = f"{ETSY_API_BASE}/listings/{listing_id}/inventory"
         payload = {
             "products": [
                 {
                     "sku": sku,
-                    "offerings": [
-                        {
-                            "price": float(price),
-                            "quantity": int(quantity),
-                            "is_enabled": True
-                        }
-                    ]
+                    "offerings": [offering]
                 }
             ]
         }
