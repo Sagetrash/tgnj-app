@@ -12,7 +12,7 @@ class TestTgnjApp(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tmp_dir.name) / "test_inventory.db"
-        self.db = database(self.db_path)
+        self.db = database.create_new_database(self.db_path)
         self.client = app.test_client()
 
     def tearDown(self):

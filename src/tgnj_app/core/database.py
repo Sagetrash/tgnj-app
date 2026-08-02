@@ -6,7 +6,10 @@ class database:
         try:
             self.path = Path(path).resolve()
             
-            db_uri = f"{self.path.as_uri()}?mode=rwc"
+            if not self.path.exists():
+                raise FileNotFoundError(f"Database file does not exist at '{self.path}'.")
+                
+            db_uri = f"{self.path.as_uri()}?mode=rw"
             
             self.conn = sql.connect(db_uri, uri=True, check_same_thread=False)
             
@@ -377,6 +380,16 @@ class database:
             curs = conn.cursor()
             curs.execute("SELECT key, value FROM _etsy_config;")
             return dict(curs.fetchall())
+
+    @classmethod
+    def create_new_database(cls, path: Path):
+        """Explicitly create and initialize a new empty database file at the specified path."""
+        path = Path(path).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Touch file to create empty DB
+        with open(path, 'a'):
+            pass
+        return cls(path)
 
 if __name__ == "__main__":
     pass
