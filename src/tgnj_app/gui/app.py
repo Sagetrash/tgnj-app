@@ -1,6 +1,8 @@
 import json
 import os, sys, io
 from pathlib import Path
+import urllib.request
+from urllib.error import HTTPError
 from flask import Flask, render_template, jsonify, request, send_file
 from tgnj_app.core.database import database
 from tgnj_app.core.labelmaker import create_pdf
@@ -474,25 +476,11 @@ def etsyLiveStats():
         shop_id = db_instance.get_etsy_config('shop_id')
         access_token = db_instance.get_etsy_config('access_token')
 
-        # Calculate unlisted local inventory count
-        unlisted_count = 0
-        try:
-            with db_instance.conn:
-                curs = db_instance.conn.cursor()
-                curs.execute("SELECT COUNT(*) FROM inventory WHERE is_deleted = 0 AND (status IS NULL OR status = 'IN_STOCK');")
-                row = curs.fetchone()
-                if row:
-                    unlisted_count = row[0]
-        except Exception:
-            pass
-
         if not api_key or not access_token or not shop_id:
             return jsonify({
                 'connected': False,
                 'active': 0,
-                'draft': 0,
-                'sold': 0,
-                'unlisted': unlisted_count
+                'draft': 0
             }), 200
 
         client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
@@ -502,15 +490,194 @@ def etsyLiveStats():
         return jsonify({
             'connected': True,
             'active': active_resp.get('count', len(active_resp.get('results', []))),
-            'draft': draft_resp.get('count', len(draft_resp.get('results', []))),
-            'unlisted': unlisted_count
+            'draft': draft_resp.get('count', len(draft_resp.get('results', [])))
         }), 200
     except Exception as e:
         print(f"[app] etsyLiveStats exception: {e}")
         return jsonify({
             'connected': False,
             'active': 0,
-            'draft': 0,
-            'sold': 0,
-            'unlisted': 0
+            'draft': 0
         }), 200
+
+@app.route('/api/etsy/checkPhotos', methods=['POST'])
+def checkPhotos():
+    data = request.json
+    items = data.get('items', [])
+    results = {}
+    for item in items:
+        group = item.get('sku_group')
+        sku_id = item.get('sku_id')
+        if group is None or sku_id is None:
+            continue
+        padded_sku = str(sku_id).zfill(3)
+        sku_key = f"{group}-{padded_sku}"
+        
+        url_a = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_key}A.jpg"
+        url_b = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_key}B.jpg"
+        
+        has_a = False
+        has_b = False
+        
+        try:
+            req_a = urllib.request.Request(url_a, method='HEAD')
+            urllib.request.urlopen(req_a)
+            has_a = True
+        except Exception:
+            pass
+            
+        try:
+            req_b = urllib.request.Request(url_b, method='HEAD')
+            urllib.request.urlopen(req_b)
+            has_b = True
+        except Exception:
+            pass
+            
+        results[sku_key] = {"a": has_a, "b": has_b}
+        
+    return jsonify({"results": results}), 200
+
+def get_fresh_etsy_tokens():
+    """Retrieve current Etsy API credentials and tokens from database."""
+    api_key = db_instance.get_etsy_config('api_key')
+    shared_secret = db_instance.get_etsy_config('shared_secret')
+    shop_id = db_instance.get_etsy_config('shop_id')
+    access_token = db_instance.get_etsy_config('access_token')
+    refresh_token = db_instance.get_etsy_config('refresh_token')
+    return api_key, shared_secret, shop_id, access_token, refresh_token
+
+def refresh_etsy_token_if_needed(client, refresh_token):
+    """Attempts to refresh the OAuth access token and save new tokens to DB."""
+    if not refresh_token:
+        return None
+    try:
+        print("[etsy_client] Refreshing expired access token using refresh_token...")
+        token_data = client.refresh_access_token(refresh_token)
+        new_access = token_data.get('access_token')
+        new_refresh = token_data.get('refresh_token')
+        if new_access:
+            db_instance.set_etsy_config('access_token', new_access)
+            if new_refresh:
+                db_instance.set_etsy_config('refresh_token', new_refresh)
+            print("[etsy_client] Access token successfully refreshed!")
+            return new_access
+    except Exception as e:
+        print(f"[etsy_client] Automatic token refresh failed: {e}")
+    return None
+
+@app.route('/api/etsy/bulkPush', methods=['POST'])
+def bulkPush():
+    from tgnj_app.core.etsy_client import EtsyClient
+    api_key, shared_secret, shop_id, access_token, refresh_token = get_fresh_etsy_tokens()
+
+    if not api_key or not access_token or not shop_id:
+        return jsonify(message('Etsy authorization required')), 400
+        
+    client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+
+    data = request.json or {}
+    items = data.get('items', [])
+    gemstone_name = data.get('gemstone_name')
+    price = data.get('price')
+    
+    total = len(items)
+    success = 0
+    failed = 0
+    results = []
+    
+    for req_item in items:
+        sku_group = req_item.get('sku_group')
+        sku_id = req_item.get('sku_id')
+        
+        if sku_group is None or sku_id is None:
+            continue
+            
+        padded_sku = str(sku_id).zfill(3)
+        sku_key = f"{sku_group}-{padded_sku}"
+            
+        # Fetch item from database
+        item = None
+        with db_instance.conn as conn:
+            curs = conn.cursor()
+            curs.execute("SELECT * FROM inventory WHERE sku_group = ? AND sku_id = ? AND is_deleted = 0;", (sku_group, sku_id))
+            row = curs.fetchone()
+            if row:
+                item = dict(row)
+
+        if not item:
+            failed += 1
+            results.append({"sku": sku_key, "error": "Item not found in database", "status": "failed"})
+            continue
+
+        # Prevent duplicate listing creation if already listed on Etsy
+        if item.get('etsy_listing_id') or item.get('status') == 'LISTED_ETSY':
+            results.append({"sku": sku_key, "listing_id": item.get('etsy_listing_id'), "error": "Already listed on Etsy", "status": "skipped"})
+            continue
+            
+        if gemstone_name:
+            item['gemstone_name'] = gemstone_name
+        if price:
+            item['etsy_price'] = price
+            
+        # Attempt listing creation with automatic token refresh and rate limit retries
+        max_retries = 3
+        attempt = 0
+        pushed_ok = False
+
+        while attempt < max_retries and not pushed_ok:
+            attempt += 1
+            try:
+                # Re-fetch current access_token from DB in case it was refreshed in a previous iteration
+                current_access = db_instance.get_etsy_config('access_token')
+                current_refresh = db_instance.get_etsy_config('refresh_token')
+
+                listing = client.create_draft_listing(current_access, item)
+                listing_id = listing.get('listing_id')
+
+                if listing_id:
+                    # Upload photos
+                    client.upload_s3_photos_for_listing(current_access, str(listing_id), sku_group, sku_id)
+                    # Update database status
+                    with db_instance.conn as conn:
+                        curs = conn.cursor()
+                        curs.execute("UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ?;", (str(listing_id), sku_group, sku_id))
+                        conn.commit()
+                    
+                    success += 1
+                    results.append({"sku": sku_key, "listing_id": listing_id, "status": "success"})
+                    pushed_ok = True
+                else:
+                    failed += 1
+                    results.append({"sku": sku_key, "error": "Listing ID not returned", "status": "failed"})
+                    pushed_ok = True # Exit retry loop if unexpected response format
+                    
+            except Exception as e:
+                err_msg = str(e).lower()
+                is_auth_error = ("401" in err_msg or "expired" in err_msg or "unauthorized" in err_msg or "invalid_token" in err_msg)
+                is_rate_limit = ("429" in err_msg or "too many requests" in err_msg)
+
+                if is_auth_error and attempt < max_retries:
+                    print(f"[bulkPush] Token expired on item {sku_key} (attempt {attempt}). Refreshing token and retrying...")
+                    new_token = refresh_etsy_token_if_needed(client, current_refresh)
+                    if new_token:
+                        time.sleep(1.0)
+                        continue # Retry immediately with new token
+                elif is_rate_limit and attempt < max_retries:
+                    print(f"[bulkPush] Rate limit hit (429) on item {sku_key}. Sleeping 5 seconds before retry...")
+                    time.sleep(5.0)
+                    continue # Retry after backoff
+                
+                # If retries exhausted or unhandled error
+                if attempt >= max_retries or (not is_auth_error and not is_rate_limit):
+                    failed += 1
+                    results.append({"sku": sku_key, "error": str(e), "status": "failed"})
+                    pushed_ok = True
+            
+        time.sleep(0.5)
+
+    return jsonify({
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "results": results
+    }), 200

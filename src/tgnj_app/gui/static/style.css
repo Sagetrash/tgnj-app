@@ -141,33 +141,128 @@ th {
   width: 100%;
 }
 
-.form-submit-button {
-  cursor: pointer;
-  outline: 0;
-  display: inline-block;
-  font-weight: 400;
-  line-height: 1.5;
-  text-align: center;
-  background-color: transparent;
+/* ── Buttons Design System ─────────────────────────────── */
+
+.form-submit-button,
+.button,
+.hdr-btn,
+.modal-btn,
+.btn {
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 8px 18px;
+  border-radius: 8px;
   border: 1px solid transparent;
-  padding: 3px 24px;
-  font-size: 1rem;
-  border-radius: 0.25rem;
-  width: fit-content;
-  transition:
-    color 0.15s ease-in-out,
-    background-color 0.15s ease-in-out,
-    border-color 0.15s ease-in-out,
-    box-shadow 0.15s ease-in-out;
-  color: #e8e2db;
-  border-color: #fab95b;
-  align-self: flex-end;
-  margin-right: 20%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+  box-sizing: border-box;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
 }
+
+.form-submit-button:hover,
+.button:hover,
+.hdr-btn:hover,
+.modal-btn:hover,
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.form-submit-button:active,
+.button:active,
+.hdr-btn:active,
+.modal-btn:active,
+.btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.form-submit-button:disabled,
+.button:disabled,
+.hdr-btn:disabled,
+.modal-btn:disabled,
+.btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Primary Form Submit & Action Buttons */
+.form-submit-button {
+  background: linear-gradient(135deg, #fab95b 0%, #e09f3e 100%);
+  color: #090443;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(250, 185, 91, 0.35);
+  margin-top: 8px;
+}
+
 .form-submit-button:hover {
-  color: #1a3263;
-  background-color: #fab95b;
-  border-color: #e8e2db;
+  background: linear-gradient(135deg, #ffc977 0%, #f0af4e 100%);
+  box-shadow: 0 6px 18px rgba(250, 185, 91, 0.5);
+  color: #040224;
+}
+
+/* Header Buttons */
+.hdr-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e8e2db;
+  backdrop-filter: blur(4px);
+}
+
+.hdr-btn:hover {
+  background: rgba(250, 185, 91, 0.18);
+  border-color: #fab95b;
+  color: #fab95b;
+  box-shadow: 0 4px 12px rgba(250, 185, 91, 0.25);
+}
+
+/* Settings Button */
+.settings-btn {
+  background: linear-gradient(135deg, #fab95b 0%, #d4973b 100%);
+  color: #090443;
+  border: none;
+  box-shadow: 0 4px 12px rgba(250, 185, 91, 0.3);
+}
+
+.settings-btn:hover {
+  background: linear-gradient(135deg, #ffc875 0%, #e5a74a 100%);
+  color: #000;
+  box-shadow: 0 6px 16px rgba(250, 185, 91, 0.45);
+}
+
+/* Etsy Header Button */
+.etsy-hdr-btn {
+  background: linear-gradient(135deg, #f56b00 0%, #d35400 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(245, 107, 0, 0.4) !important;
+  font-weight: 700 !important;
+}
+
+.etsy-hdr-btn:hover {
+  background: linear-gradient(135deg, #ff7a14 0%, #e65c00 100%) !important;
+  box-shadow: 0 6px 20px rgba(245, 107, 0, 0.6) !important;
+}
+
+/* Bulk Add & Action Buttons */
+.btn-add, .primary-btn {
+  background: linear-gradient(135deg, #27ae60 0%, #1e824c 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(39, 174, 96, 0.35) !important;
+  font-weight: 700 !important;
+}
+
+.btn-add:hover, .primary-btn:hover {
+  background: linear-gradient(135deg, #2ecc71 0%, #25a25a 100%) !important;
+  box-shadow: 0 6px 18px rgba(46, 204, 113, 0.5) !important;
 }
 
 .delete-button {
@@ -203,36 +298,6 @@ header {
   padding: 5px 20px;
   border-bottom: 1px solid #fab95b;
   max-height: 50px;
-}
-
-.button {
-  cursor: pointer;
-  outline: 0;
-  display: inline-block;
-  font-weight: 400;
-  line-height: 1.5;
-  text-align: center;
-  background-color: transparent;
-  border: 1px solid transparent;
-  padding: 3px 24px;
-  font-size: 1rem;
-  border-radius: 0.25rem;
-  width: fit-content;
-  height: fit-content;
-  align-self: center;
-  transition:
-    color 0.15s ease-in-out,
-    background-color 0.15s ease-in-out,
-    border-color 0.15s ease-in-out,
-    box-shadow 0.15s ease-in-out;
-  color: #e8e2db;
-  border-color: #fab95b;
-}
-
-.button:hover {
-  color: #1a3263;
-  background-color: #fab95b;
-  border-color: #e8e2db;
 }
 
 /* ── Turso Sync UI ─────────────────────────────── */
@@ -294,35 +359,6 @@ header {
   display: flex;
   gap: 12px;
   align-items: center;
-}
-
-.hdr-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #e8e2db;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.hdr-btn:hover {
-  background: rgba(250, 185, 91, 0.2);
-  border-color: #fab95b;
-  color: #fab95b;
-}
-
-.settings-btn {
-  background: #fab95b;
-  color: #090443;
-  border-color: #fab95b;
-}
-
-.settings-btn:hover {
-  background: #f3a83b;
-  color: #000;
 }
 
 /* ── Settings Modal Overlay ───────────────────────── */
@@ -437,24 +473,6 @@ header {
   display: flex;
   gap: 8px;
   margin-top: 6px;
-}
-
-.modal-btn {
-  border: none;
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.primary-btn {
-  background: #27ae60;
-  color: #fff;
-}
-.primary-btn:hover {
-  background: #2ecc71;
 }
 
 .accent-btn {
@@ -631,4 +649,41 @@ header {
 .etsy-orders-table th {
   background: #090e24;
   color: #fab95b;
+}
+
+/* ── Badges & Status Styling ────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.badge-listed {
+  background: rgba(39, 174, 96, 0.18);
+  color: #2ecc71;
+  border: 1px solid rgba(39, 174, 96, 0.4);
+}
+
+.badge-listed:hover {
+  background: rgba(39, 174, 96, 0.3);
+  box-shadow: 0 0 10px rgba(46, 204, 113, 0.3);
+}
+
+.badge-unlisted {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a0aab8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.badge-sold {
+  background: rgba(231, 76, 60, 0.18);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.4);
 }

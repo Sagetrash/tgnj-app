@@ -105,6 +105,12 @@
       </div>
       <!--  -->
       <div class="table-window">
+        <div class="table-toolbar" style="display:flex; justify:space-between; align-items:center; padding:10px 16px; background:#1a3263; border-bottom:1px solid rgba(255,255,255,0.1);">
+          <span id="table-title" style="font-weight:600; font-size:0.95rem; color:#fab95b;">📋 Inventory Table</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button type="button" class="hdr-btn" onclick="refreshMainTableUI()" id="refresh-tbl-btn">🔄 Refresh Table</button>
+          </div>
+        </div>
         <div class="table-container">
           <table id="display-table">
             <thead>
@@ -115,6 +121,7 @@
                 <th>length</th>
                 <th>width</th>
                 <th>depth</th>
+                <th>etsy status</th>
                 <th class="deleteCol">delete</th>
               </tr>
             </thead>

@@ -76,14 +76,24 @@ async function renderTable(data) {
     if (counter % 2 === 0) {
       row.classList.add("alt-row");
     }
+    let etsyStatusHtml = '<span class="badge badge-unlisted" style="opacity:0.6;">Unlisted</span>';
+    if (item.status === 'SOLD') {
+      etsyStatusHtml = `<span class="badge badge-sold">🔴 Sold</span>`;
+    } else if (item.etsy_listing_id || item.status === 'LISTED_ETSY') {
+      const listingId = item.etsy_listing_id || '';
+      const etsyLink = listingId ? `https://www.etsy.com/listing/${listingId}` : 'https://www.etsy.com/your/shops/me/tools/listings';
+      etsyStatusHtml = `<a href="${etsyLink}" target="_blank" class="badge badge-listed" style="text-decoration:none;" onclick="event.stopPropagation();">🧡 Listed #${listingId} ↗</a>`;
+    }
+
     row.innerHTML = `
-    <td>${item.sku_group}-${formattedId}</td>
+    <td><strong>${item.sku_group}-${formattedId}</strong></td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'shape',this.innerText)">${item.shape}</td>
-    <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'weight',this.innerText)">${item.weight.toFixed(2)}</td>
+    <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'weight',this.innerText)">${Number(item.weight).toFixed(2)}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'length',this.innerText)">${item.length}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'width',this.innerText)">${item.width}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'depth',this.innerText)">${item.depth}</td>
-    <td class="deleteCol" onclick = "event.stopPropagation();"><span class="delete-button" onclick="deleteItem('${item.sku_group}',${item.sku_id})"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#" class="delete-icon">
+    <td>${etsyStatusHtml}</td>
+    <td class="deleteCol" onclick = "event.stopPropagation();"><span class="delete-button" onclick="deleteItem('${item.sku_group}',${item.sku_id})"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="delete-icon">
     <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
   </svg></span></td>
     `;
@@ -289,6 +299,29 @@ async function saveTursoConfig() {
   }
 }
 
+async function refreshMainTableUI() {
+  const btn = document.getElementById('refresh-tbl-btn');
+  if (btn) {
+    btn.textContent = '🔄 Refreshing...';
+    btn.style.opacity = '0.7';
+  }
+  const groupInput = document.getElementById("sku_group");
+  const group = groupInput ? groupInput.value.trim().toUpperCase() : "";
+  if (group) {
+    await refreshTableOnly(group);
+  } else {
+    // If no group typed in form, load default or prompt
+    const tbody = document.getElementById("display-table-body");
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center muted-text" style="padding:1rem;">Type a SKU Group (e.g. LP, G2) in the form to view items.</td></tr>`;
+  }
+  setTimeout(() => {
+    if (btn) {
+      btn.textContent = '🔄 Refresh Table';
+      btn.style.opacity = '1';
+    }
+  }, 400);
+}
+
 async function refreshTableOnly(sku_group) {
   const groupInput = document.getElementById("sku_group");
   const group = sku_group || (groupInput ? groupInput.value.trim().toUpperCase() : "");
@@ -298,6 +331,12 @@ async function refreshTableOnly(sku_group) {
     const data = await response.json();
     renderTable(data);
     scrollToEnd();
+
+    // Update title bar count
+    const titleEl = document.getElementById('table-title');
+    if (titleEl) {
+      titleEl.textContent = `📋 Inventory Table — Group ${group} (${data.length} items)`;
+    }
 
     // Auto-update next available item_id if user is NOT currently typing in form fields
     const isFormFocused = formOrder.some(

@@ -56,29 +56,69 @@
           <h2>🚀 Bulk Draft Publisher & S3 Photo Uploader</h2>
         </div>
         <div class="card-body">
-          <p class="section-desc">Bulk create draft listings on Etsy and auto-upload Photos A & B from AWS S3 in one click.</p>
+          <p class="section-desc">Select a SKU group, enter gemstone details, preview your listings, then push drafts to Etsy with auto-uploaded S3 photos.</p>
+          
+          <!-- Step 1: Configuration Inputs -->
           <div class="bulk-form-grid">
             <div class="field-group">
               <label for="bulk_group">Target SKU Group</label>
-              <select id="bulk_group" class="modal-input">
-                <option value="ALL">ALL SKU GROUPS</option>
+              <select id="bulk_group" class="modal-input" onchange="loadBulkPreview()">
+                <option value="">-- Select SKU Group --</option>
               </select>
             </div>
             <div class="field-group">
-              <label for="bulk_price_per_ct">Default Price Per Carat ($ / ct)</label>
-              <input type="number" step="0.01" id="bulk_price_per_ct" class="modal-input" placeholder="e.g. 2.50" />
+              <label for="bulk_gemstone_name">Gemstone Name</label>
+              <input type="text" id="bulk_gemstone_name" class="modal-input" placeholder="e.g. Lapis Lazuli" oninput="updateTitlePreviews()" />
             </div>
             <div class="field-group">
-              <label for="bulk_fixed_price">Default Fixed Price ($ USD)</label>
-              <input type="number" step="0.01" id="bulk_fixed_price" class="modal-input" placeholder="e.g. 12.99" value="12.99" />
+              <label for="bulk_fixed_price">Price ($ USD)</label>
+              <input type="number" step="0.01" id="bulk_fixed_price" class="modal-input" placeholder="e.g. 12.99" value="12.99" oninput="updateTitlePreviews()" />
             </div>
           </div>
-          <div class="bulk-action-bar">
-            <button class="btn btn-add" onclick="runBulkPublisher()">🚀 Bulk Create Drafts & Upload Photos</button>
+
+          <!-- Step 2: Preview Table -->
+          <div id="bulk-preview-section" style="display:none; margin-top: 1.2rem;">
+            <div class="bulk-preview-header">
+              <h3 id="bulk-preview-title">📋 Preview: 0 stones loaded</h3>
+              <div class="bulk-select-controls">
+                <label style="font-size:0.85rem; display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer; margin-right:0.8rem;">
+                  <input type="checkbox" id="bulk-show-listed-cb" onchange="loadBulkPreview()" /> Show Already Listed
+                </label>
+                <button class="hdr-btn" onclick="toggleSelectAll(true)">☑ Select All</button>
+                <button class="hdr-btn" onclick="toggleSelectAll(false)">☐ Deselect All</button>
+                <span id="bulk-selected-count" class="badge badge-listed">0 selected</span>
+              </div>
+            </div>
+            <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+              <table class="etsy-orders-table">
+                <thead>
+                  <tr>
+                    <th style="width:40px;"><input type="checkbox" id="bulk-select-all-cb" onchange="toggleSelectAll(this.checked)" checked /></th>
+                    <th>SKU</th>
+                    <th>Weight</th>
+                    <th>Shape</th>
+                    <th>Dims (mm)</th>
+                    <th>📷 Photos</th>
+                    <th>Title Preview</th>
+                  </tr>
+                </thead>
+                <tbody id="bulk-preview-tbody">
+                  <tr><td colspan="7" class="muted-text text-center">Select a SKU group above to load stones.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Step 3: Push Button & Progress -->
+          <div class="bulk-action-bar" style="margin-top: 1rem;">
+            <button id="bulk-push-btn" class="btn btn-add" onclick="runBulkPublisher()" disabled>🚀 Push Selected Drafts to Etsy</button>
           </div>
           <div id="bulk-progress-container" class="progress-container" style="display:none;">
             <div id="bulk-progress-bar" class="progress-bar"></div>
             <span id="bulk-progress-text" class="progress-text">Processing...</span>
+          </div>
+          <div id="bulk-log-container" style="display:none; margin-top:0.8rem; max-height:200px; overflow-y:auto; background:var(--clr-bg-card,#1e1e2e); border-radius:8px; padding:0.7rem; font-size:0.82rem; font-family:monospace;">
+            <div id="bulk-log"></div>
           </div>
         </div>
       </div>
