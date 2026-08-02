@@ -77,12 +77,20 @@ async function renderTable(data) {
       row.classList.add("alt-row");
     }
     let etsyStatusHtml = '<span class="badge badge-unlisted" style="opacity:0.6;">Unlisted</span>';
+    let actionBtnHtml = `<span class="delete-button" title="Delete Item" onclick="deleteItem('${item.sku_group}',${item.sku_id})"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="delete-icon"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></span>`;
+
     if (item.status === 'SOLD') {
-      etsyStatusHtml = `<span class="badge badge-sold">🔴 Sold</span>`;
+      const soldPrice = item.sold_price ? `$${Number(item.sold_price).toFixed(2)}` : '';
+      const channel = item.sold_channel ? `(${item.sold_channel})` : '';
+      etsyStatusHtml = `<span class="badge badge-sold">🔴 Sold ${soldPrice} ${channel}</span>`;
+      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem;" title="Restore to Stock" onclick="restoreItemUI('${item.sku_group}',${item.sku_id})">↩️ Restore</button>`;
     } else if (item.etsy_listing_id || item.status === 'LISTED_ETSY') {
       const listingId = item.etsy_listing_id || '';
       const etsyLink = listingId ? `https://www.etsy.com/listing/${listingId}` : 'https://www.etsy.com/your/shops/me/tools/listings';
       etsyStatusHtml = `<a href="${etsyLink}" target="_blank" class="badge badge-listed" style="text-decoration:none;" onclick="event.stopPropagation();">🧡 Listed #${listingId} ↗</a>`;
+      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem; border-color:#e74c3c; color:#e74c3c;" title="Mark as Sold" onclick="markSoldUI('${item.sku_group}',${item.sku_id})">🏷️ Sold</button> ${actionBtnHtml}`;
+    } else {
+      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem; border-color:#e74c3c; color:#e74c3c;" title="Mark as Sold" onclick="markSoldUI('${item.sku_group}',${item.sku_id})">🏷️ Sold</button> ${actionBtnHtml}`;
     }
 
     row.innerHTML = `
@@ -93,9 +101,7 @@ async function renderTable(data) {
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'width',this.innerText)">${item.width}</td>
     <td contenteditable="true" onblur="editItem('${item.sku_group}',${item.sku_id},'depth',this.innerText)">${item.depth}</td>
     <td>${etsyStatusHtml}</td>
-    <td class="deleteCol" onclick = "event.stopPropagation();"><span class="delete-button" onclick="deleteItem('${item.sku_group}',${item.sku_id})"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="delete-icon">
-    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-  </svg></span></td>
+    <td class="deleteCol" onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:6px; justify-content:center;">${actionBtnHtml}</td>
     `;
     tbody.appendChild(row);
   });
@@ -137,6 +143,46 @@ async function deleteItem(sku_group, sku_id) {
     });
   }
   liveLoadGroup();
+}
+
+async function markSoldUI(sku_group, sku_id) {
+  const formattedId = String(sku_id).padStart(3, "0");
+  const priceStr = prompt(`Mark ${sku_group}-${formattedId} as SOLD?\nEnter sale price ($ USD):`, "12.99");
+  if (priceStr === null) return; // User cancelled
+  const price = parseFloat(priceStr) || 0.0;
+  const channel = prompt("Enter sales channel (e.g. Offline, Etsy, Instagram):", "Offline") || "Offline";
+
+  try {
+    const res = await fetch(`/api/markSold/${sku_group}/${sku_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ price, channel })
+    });
+    if (res.ok) {
+      liveLoadGroup();
+    } else {
+      alert('Error marking item as sold.');
+    }
+  } catch (e) {
+    alert('Error marking item as sold: ' + e);
+  }
+}
+
+async function restoreItemUI(sku_group, sku_id) {
+  const formattedId = String(sku_id).padStart(3, "0");
+  if (!confirm(`Restore ${sku_group}-${formattedId} back to active inventory?`)) return;
+  try {
+    const res = await fetch(`/api/restoreItem/${sku_group}/${sku_id}`, {
+      method: 'POST'
+    });
+    if (res.ok) {
+      liveLoadGroup();
+    } else {
+      alert('Error restoring item.');
+    }
+  } catch (e) {
+    alert('Error restoring item: ' + e);
+  }
 }
 
 async function handleFormSubmit() {

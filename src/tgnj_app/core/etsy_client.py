@@ -304,6 +304,25 @@ class EtsyClient:
             print(f"[etsy_client] get_shop_receipts exception: {e}")
             return {"count": 0, "results": []}
 
+    def get_shop_receipt_transactions(self, access_token: str, limit: int = 50) -> dict:
+        """Fetch transactions associated with shop receipts (includes SKU, price, listing_id)."""
+        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/transactions?limit={limit}"
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}"
+        }
+        req = Request(url, headers=headers, method="GET")
+        try:
+            with urlopen(req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            print(f"[etsy_client] get_shop_receipt_transactions error: {e.code} - {err_body}")
+            return {"count": 0, "results": []}
+        except Exception as e:
+            print(f"[etsy_client] get_shop_receipt_transactions exception: {e}")
+            return {"count": 0, "results": []}
+
     def get_shop_listings_by_state(self, access_token: str, state: str = "active", limit: int = 100) -> dict:
         """Fetch live shop listings directly from Etsy by state ('active', 'draft', 'inactive', 'sold_out')."""
         url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings?state={state}&limit={limit}"

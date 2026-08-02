@@ -406,22 +406,95 @@ def getDataByStatus(status: str):
 @app.route('/api/etsy/syncOrders', methods=['POST'])
 def etsySyncOrders():
     from tgnj_app.core.etsy_client import EtsyClient
-    api_key = db_instance.get_etsy_config('api_key')
-    shared_secret = db_instance.get_etsy_config('shared_secret')
-    shop_id = db_instance.get_etsy_config('shop_id')
-    access_token = db_instance.get_etsy_config('access_token')
+    api_key, shared_secret, shop_id, access_token, refresh_token = get_fresh_etsy_tokens()
 
     if not api_key or not access_token or not shop_id:
         return jsonify(message('Etsy authorization required')), 400
 
     client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+    synced_count = 0
+    
     try:
-        receipts = client.get_shop_receipts(access_token)
-        # Parse receipts and update sold items
-        synced_count = 0
-        return jsonify({'message': f'Synced Etsy sales receipts! Updated {synced_count} orders.'}), 200
+        # Engine 1: Fetch transactions associated with shop receipts
+        tx_data = client.get_shop_receipt_transactions(access_token, limit=50)
+        transactions = tx_data.get('results', [])
+        
+        with db_instance.conn as conn:
+            curs = conn.cursor()
+            for tx in transactions:
+                listing_id = str(tx.get('listing_id', ''))
+                sku = tx.get('sku', '').strip().upper()
+                price_amount = tx.get('price', {}).get('amount', 0) / tx.get('price', {}).get('divisor', 100) if isinstance(tx.get('price'), dict) else float(tx.get('price') or 0.0)
+
+                # Match by SKU (e.g. LP-014) or etsy_listing_id
+                if sku and '-' in sku:
+                    parts = sku.split('-')
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        grp = parts[0]
+                        s_id = int(parts[1])
+                        curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = 'Etsy', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');", (price_amount, listing_id, grp, s_id))
+                        if curs.rowcount > 0:
+                            synced_count += curs.rowcount
+                elif listing_id:
+                    curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = 'Etsy' WHERE etsy_listing_id = ? AND (status IS NULL OR status != 'SOLD');", (price_amount, listing_id))
+                    if curs.rowcount > 0:
+                        synced_count += curs.rowcount
+
+        # Engine 2: Safety net - Fetch listings with state 'sold_out'
+        sold_out_data = client.get_shop_listings_by_state(access_token, state='sold_out', limit=100)
+        sold_out_listings = sold_out_data.get('results', [])
+        
+        with db_instance.conn as conn:
+            curs = conn.cursor()
+            for listing in sold_out_listings:
+                listing_id = str(listing.get('listing_id', ''))
+                sku = listing.get('sku', '').strip().upper()
+                price_amount = float(listing.get('price', {}).get('amount', 0) / listing.get('price', {}).get('divisor', 100)) if isinstance(listing.get('price'), dict) else float(listing.get('price') or 0.0)
+
+                if sku and '-' in sku:
+                    parts = sku.split('-')
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        grp = parts[0]
+                        s_id = int(parts[1])
+                        curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = 'Etsy', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');", (price_amount, listing_id, grp, s_id))
+                        if curs.rowcount > 0:
+                            synced_count += curs.rowcount
+
+        if synced_count > 0:
+            trigger_async_sync()
+
+        return jsonify({'message': f'Synced Etsy sales! Updated {synced_count} sold items in local inventory.'}), 200
     except Exception as e:
+        print(f"[app] etsySyncOrders exception: {e}")
         return jsonify(message(f'Etsy Sync Orders Exception: {e}')), 500
+
+@app.route('/api/markSold/<sku_group>/<int:sku_id>', methods=['POST'])
+def markSold(sku_group: str, sku_id: int):
+    data = request.json or {}
+    price = data.get('price', 0.0)
+    channel = data.get('channel', 'Offline')
+    
+    with db_instance.conn as conn:
+        curs = conn.cursor()
+        curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = ? WHERE sku_group = ? AND sku_id = ?;", (price, channel, sku_group, sku_id))
+        conn.commit()
+        if curs.rowcount > 0:
+            trigger_async_sync()
+            return jsonify(message(f'Marked {sku_group}-{sku_id:03d} as SOLD')), 200
+        else:
+            return jsonify(message('Item not found')), 404
+
+@app.route('/api/restoreItem/<sku_group>/<int:sku_id>', methods=['POST'])
+def restoreItem(sku_group: str, sku_id: int):
+    with db_instance.conn as conn:
+        curs = conn.cursor()
+        curs.execute("UPDATE inventory SET status = 'IN_STOCK' WHERE sku_group = ? AND sku_id = ?;", (sku_group, sku_id))
+        conn.commit()
+        if curs.rowcount > 0:
+            trigger_async_sync()
+            return jsonify(message(f'Restored {sku_group}-{sku_id:03d} to IN_STOCK')), 200
+        else:
+            return jsonify(message('Item not found')), 404
 
 @app.route('/api/etsy/pushListing/<sku_group>/<int:sku_id>', methods=['POST'])
 def pushListing(sku_group: str, sku_id: int):
