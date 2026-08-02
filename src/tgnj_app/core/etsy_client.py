@@ -157,29 +157,26 @@ class EtsyClient:
         if price <= 0:
             price = 12.99
             
-        gemstone_name = item.get("gemstone_name") or "Black Tourmaline Rutile Quartz"
+        gemstone_name = item.get("gemstone_name") or "Gemstone"
         title = item.get("custom_title") or f"{weight:.2f} Ct.Natural High Quality {gemstone_name} Loose Gemstone {shape} Cabochon For Jewelry Making"
         
-        description = item.get("custom_description") or (
-            f"Natural {gemstone_name} Cabochon - High Quality Loose Gemstone\n\n"
-            f"PRODUCT OVERVIEW\n"
-            f"This listing is for a premium, hand-polished {gemstone_name} cabochon. Known for its striking contrast, "
-            f"this natural clear quartz is filled with needle-like inclusions of Black Tourmaline (Rutile), creating a unique \"matrix\" or \"spider-web\" effect. "
-            f"No two stones are ever exactly alike, making this a truly one-of-a-kind piece for your next jewelry project.\n\n"
+        # Build Specifications Section (First)
+        dims_str = f"{length} x {width} x {depth} mm" if (length or width or depth) else "N/A"
+        specs_section = (
             f"SPECIFICATIONS\n"
             f"SKU: {sku_str}\n"
             f"Gemstone: Natural {gemstone_name}\n"
             f"Shape: {shape}\n"
             f"Carat Weight: {weight:.2f} Cts\n"
-            f"Dimensions: {length} x {width} x {depth} mm\n"
-            f"Treatment: 100% Natural and Untreated\n\n"
-            f"METAPHYSICAL PROPERTIES\n"
-            f"{gemstone_name} is often called the \"stone of power.\" It is believed to be a strong grounding stone that clears energy blockages and protects the wearer from negativity. "
-            f"Its unique balance of clear quartz and dark inclusions makes it a symbol of the union between light and shadow.\n\n"
-            f"IDEAL USES\n"
-            f"This stone is perfectly suited for custom rings, statement pendants, or boho-style earrings. "
-            f"It is also a popular choice for crystal healing collections, meditation altars, or as a unique gift for gemstone collectors."
+            f"Dimensions: {dims_str}\n"
+            f"Treatment: 100% Natural and Untreated"
         )
+        
+        custom_notes = (item.get("custom_description") or "").strip()
+        if custom_notes:
+            description = f"{specs_section}\n\nDESCRIPTION\n{custom_notes}"
+        else:
+            description = specs_section
         
         tags = item.get("custom_tags") or [gemstone_name, "Loose Gemstone", "Cabochon for Ring", "Jewelry Making", "Natural Stone", "Healing Crystal", "DIY Jewelry", f"{shape} Cabochon", "Unique Gemstone"]
         materials = [f"Natural {gemstone_name}", "Hand Polished Cabochon", "Untreated Gemstone"]

@@ -205,9 +205,11 @@ async function runBulkPublisher() {
 
   const gemNameInput = document.getElementById('bulk_gemstone_name');
   const priceInput = document.getElementById('bulk_fixed_price');
+  const descInput = document.getElementById('bulk_custom_description');
 
   const gemstone_name = gemNameInput ? gemNameInput.value.trim() : '';
   const price = priceInput ? parseFloat(priceInput.value) : 12.99;
+  const custom_description = descInput ? descInput.value.trim() : '';
 
   if (!gemstone_name) {
     alert("Gemstone name is required.");
@@ -247,7 +249,7 @@ async function runBulkPublisher() {
     const res = await fetch('/api/etsy/bulkPush', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, gemstone_name, price })
+      body: JSON.stringify({ items, gemstone_name, price, custom_description })
     });
     
     if (res.ok) {

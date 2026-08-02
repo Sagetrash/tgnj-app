@@ -701,6 +701,7 @@ def bulkPush():
     items = data.get('items', [])
     gemstone_name = data.get('gemstone_name')
     price = data.get('price')
+    custom_description = data.get('custom_description', '')
     
     total = len(items)
     success = 0
@@ -740,6 +741,8 @@ def bulkPush():
             item['gemstone_name'] = gemstone_name
         if price:
             item['etsy_price'] = price
+        if custom_description:
+            item['custom_description'] = custom_description
             
         # Attempt listing creation with automatic token refresh and rate limit retries
         max_retries = 3
