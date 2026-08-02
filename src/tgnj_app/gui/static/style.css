@@ -193,19 +193,44 @@ th {
   box-shadow: none !important;
 }
 
-/* Primary Form Submit & Action Buttons */
-.form-submit-button {
+/* Form Side-by-Side Button Row */
+.form-btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 0 4px;
+}
+
+.form-submit-btn {
+  flex: 1.2;
   background: linear-gradient(135deg, #fab95b 0%, #e09f3e 100%);
   color: #090443;
   font-weight: 700;
-  box-shadow: 0 4px 12px rgba(250, 185, 91, 0.35);
-  margin-top: 8px;
+  box-shadow: 0 3px 10px rgba(250, 185, 91, 0.3);
+  padding: 8px 12px;
+  font-size: 0.84rem;
 }
 
-.form-submit-button:hover {
+.form-submit-btn:hover {
   background: linear-gradient(135deg, #ffc977 0%, #f0af4e 100%);
-  box-shadow: 0 6px 18px rgba(250, 185, 91, 0.5);
+  box-shadow: 0 5px 14px rgba(250, 185, 91, 0.45);
   color: #040224;
+}
+
+.form-print-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e8e2db;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+}
+
+.form-print-btn:hover {
+  background: rgba(250, 185, 91, 0.18);
+  border-color: #fab95b;
+  color: #fab95b;
+  box-shadow: 0 3px 10px rgba(250, 185, 91, 0.2);
 }
 
 /* Header Buttons */
