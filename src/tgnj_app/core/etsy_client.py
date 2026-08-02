@@ -130,7 +130,23 @@ class EtsyClient:
             print(f"[etsy_client] get_readiness_states error: {e}")
             return []
 
-    def create_draft_listing(self, access_token: str, item: dict, taxonomy_id: int = 6648, shipping_profile_id: int = None, readiness_state_id: int = None) -> dict:
+    def get_shop_sections(self, access_token: str) -> list[dict]:
+        """Fetch shop sections for the Etsy shop."""
+        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/sections"
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}"
+        }
+        req = Request(url, headers=headers, method="GET")
+        try:
+            with urlopen(req) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data.get("results", [])
+        except Exception as e:
+            print(f"[etsy_client] get_shop_sections error: {e}")
+            return []
+
+    def create_draft_listing(self, access_token: str, item: dict, taxonomy_id: int = 6648, shipping_profile_id: int = None, readiness_state_id: int = None, shop_section_id: int = None) -> dict:
         """
         Creates a draft listing on Etsy for TakshGems under Cabochons category (taxonomy_id=6648).
         """
@@ -158,7 +174,7 @@ class EtsyClient:
             price = 12.99
             
         gemstone_name = item.get("gemstone_name") or "Gemstone"
-        title = item.get("custom_title") or f"{weight:.2f} Ct.Natural High Quality {gemstone_name} Loose Gemstone {shape} Cabochon For Jewelry Making"
+        title = item.get("custom_title") or f"{weight:.2f} Ct. Natural High Quality {gemstone_name} Loose Gemstone {shape} Cabochon For Jewelry Making"
         
         # Build Specifications Section (First)
         dims_str = f"{length} x {width} x {depth} mm" if (length or width or depth) else "N/A"
@@ -178,25 +194,27 @@ class EtsyClient:
         else:
             description = specs_section
         
-        tags = item.get("custom_tags") or [gemstone_name, "Loose Gemstone", "Cabochon for Ring", "Jewelry Making", "Natural Stone", "Healing Crystal", "DIY Jewelry", f"{shape} Cabochon", "Unique Gemstone"]
-        materials = [f"Natural {gemstone_name}", "Hand Polished Cabochon", "Untreated Gemstone"]
+        # User requested tags left blank for post editing, and materials set to Natural Gemstone & Untreated Gemstone
+        tags = item.get("custom_tags") if item.get("custom_tags") is not None else []
+        materials = [f"Natural {gemstone_name}", "Untreated Gemstone"]
         
         payload = {
             "quantity": 1,
             "title": title[:140],
             "description": description,
             "price": price,
-            "who_made": "i_did",
+            "who_made": "collective",  # "A member of my shop"
             "when_made": "2020_2026",
             "taxonomy_id": taxonomy_id,
             "shipping_profile_id": shipping_profile_id,
             "readiness_state_id": readiness_state_id,
+            "shop_section_id": shop_section_id,
             "sku": sku_str,
             "tags": tags[:13],
             "materials": materials[:5],
             "state": "draft",
             "type": "physical",
-            "is_supply": True,
+            "is_supply": True,  # "A supply or tool to make things"
             "item_length": float(length) if length > 0 else None,
             "item_width": float(width) if width > 0 else None,
             "item_height": float(depth) if depth > 0 else None,

@@ -768,15 +768,17 @@ def bulkPush():
     gemstone_name = data.get('gemstone_name')
     price = data.get('price')
     custom_description = data.get('custom_description', '')
+    primary_color = data.get('primary_color', '')
     
     total = len(items)
     success = 0
     failed = 0
     results = []
 
-    # Pre-fetch shipping profiles & readiness state once for entire batch to avoid redundant API calls
+    # Pre-fetch shipping profiles, readiness state, and shop sections once for entire batch
     shipping_profile_id = None
     readiness_state_id = None
+    matched_section_id = None
     try:
         profiles = client.get_shipping_profiles(access_token)
         if profiles:
@@ -784,8 +786,22 @@ def bulkPush():
         states = client.get_readiness_states(access_token)
         if states:
             readiness_state_id = states[0].get("readiness_state_id")
+        
+        sections = client.get_shop_sections(access_token)
+        if sections and gemstone_name:
+            g_lower = gemstone_name.strip().lower()
+            section_map = {sec.get("title", "").strip().lower(): sec.get("shop_section_id") for sec in sections if sec.get("title")}
+            if g_lower in section_map:
+                matched_section_id = section_map[g_lower]
+            else:
+                for sec_title, sec_id in section_map.items():
+                    if g_lower in sec_title or sec_title in g_lower:
+                        matched_section_id = sec_id
+                        break
+            if matched_section_id:
+                print(f"[bulkPush] Auto-matched shop section '{gemstone_name}' -> Section ID #{matched_section_id}")
     except Exception as e:
-        print(f"[bulkPush] Profile pre-fetch notice: {e}")
+        print(f"[bulkPush] Pre-fetch notice: {e}")
 
     batch_start_time = time.perf_counter()
     draft_times = []
@@ -845,7 +861,8 @@ def bulkPush():
                     current_access, 
                     item, 
                     shipping_profile_id=shipping_profile_id, 
-                    readiness_state_id=readiness_state_id
+                    readiness_state_id=readiness_state_id,
+                    shop_section_id=matched_section_id
                 )
                 t_draft = time.perf_counter() - t0
                 draft_times.append(t_draft)
