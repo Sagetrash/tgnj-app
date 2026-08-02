@@ -13,38 +13,15 @@
   </head>
   <body>
     <header>
-      <div class="db_path_container">
-        <label for="db_path">Database Path:</label>
-        <p
-          type="text"
-          name="db_path"
-          id="db_path"
-          onblur="setDbPath()"
-          width="fit-content"
-          contenteditable="true"
-        ></p>
+      <div class="header-brand">
+        <h1>💎 TGNJ Inventory Hub</h1>
       </div>
-      <div class="turso-config" id="turso-config">
-        <input
-          type="text"
-          id="turso_url"
-          class="turso-input"
-          placeholder="Turso URL"
-          onblur="saveTursoConfig()"
-        />
-        <input
-          type="password"
-          id="turso_token"
-          class="turso-input"
-          placeholder="Turso Token"
-          onblur="saveTursoConfig()"
-        />
-        <span id="sync-status" class="sync-status"></span>
-        <span class="button" id="sync-btn" onclick="syncNow()">Sync</span>
+      
+      <div class="header-actions">
+        <button type="button" class="hdr-btn etsy-hdr-btn" onclick="window.location.href='/etsy'">🧡 Etsy Operations</button>
+        <button type="button" class="hdr-btn" onclick="syncNow()">☁ Turso Sync</button>
+        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">⚙️ Settings</button>
       </div>
-      <span class="button" onclick="extractData()" id="extract-btn"
-        >Extract Data</span
-      >
     </header>
     <div class="window">
       <div class="form-container">
@@ -145,7 +122,76 @@
           </table>
         </div>
       </div>
+    <!-- Settings Modal Popup -->
+    <div id="settings-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>⚙️ Configuration & Secrets</h2>
+          <button class="modal-close-btn" onclick="closeSettingsModal()">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+          <!-- Etsy Section -->
+          <div class="config-section">
+            <h3>🧡 TakshGems Etsy Integration</h3>
+            <p class="section-desc">Manage Etsy OpenAPI v3 Keystring & Credentials.</p>
+            <div class="field-group">
+              <label for="etsy_key">Etsy API Keystring (Client ID)</label>
+              <input type="text" id="etsy_key" class="modal-input" placeholder="Enter Etsy Keystring" />
+            </div>
+            <div class="field-group">
+              <label for="etsy_shared_secret">Etsy Shared Secret (Client Secret)</label>
+              <input type="password" id="etsy_shared_secret" class="modal-input" placeholder="Enter Etsy Shared Secret" />
+            </div>
+            <div class="field-group">
+              <label for="etsy_shop_id">TakshGems Shop ID / Name</label>
+              <input type="text" id="etsy_shop_id" class="modal-input" placeholder="e.g. takshgems" />
+            </div>
+            <div class="modal-btn-row">
+              <button class="modal-btn primary-btn" onclick="saveEtsyConfig()">Save Etsy Credentials</button>
+              <button class="modal-btn accent-btn" onclick="connectEtsy()">Connect TakshGems Shop ↗</button>
+            </div>
+          </div>
+
+          <hr class="modal-divider" />
+
+          <!-- Turso Sync Section -->
+          <div class="config-section">
+            <h3>☁ Turso Cloud Sync</h3>
+            <p class="section-desc">Configure Turso SQLite cloud database sync.</p>
+            <div class="field-group">
+              <label for="turso_url">Turso DB URL</label>
+              <input type="text" id="turso_url" class="modal-input" placeholder="libsql://your-db.turso.io" />
+            </div>
+            <div class="field-group">
+              <label for="turso_token">Turso Auth Token</label>
+              <input type="password" id="turso_token" class="modal-input" placeholder="ey..." />
+            </div>
+            <div class="modal-btn-row">
+              <button class="modal-btn primary-btn" onclick="saveTursoConfigUI()">Save Turso Config</button>
+            </div>
+          </div>
+
+          <hr class="modal-divider" />
+
+          <!-- Local DB Section -->
+          <div class="config-section">
+            <h3>📁 Local Database Path</h3>
+            <div class="field-group">
+              <input type="text" id="db_path_input" class="modal-input" placeholder="/path/to/inventory.db" />
+            </div>
+            <div class="modal-btn-row">
+              <button class="modal-btn secondary-btn" onclick="saveDbPathUI()">Save DB Path</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <span>The term 'Etsy' is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.</span>
+        </div>
+      </div>
     </div>
+
     <script src="{{ url_for('static',filename='script.js')}}"></script>
   </body>
 </html>

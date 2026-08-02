@@ -369,6 +369,116 @@ async function pollSyncStatus() {
   } catch (e) { /* silent */ }
 }
 
-// Poll sync status every 10 seconds
-setInterval(pollSyncStatus, 10000);
+// ________________________ Settings Modal & Etsy Config ________________________
+
+function openSettingsModal() {
+  const modal = document.getElementById('settings-modal');
+  if (modal) {
+    modal.classList.add('active');
+    loadEtsyConfig();
+    loadTursoConfigUI();
+    loadDbPathUI();
+  }
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById('settings-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+}
+
+function closeModalOnOverlay(event) {
+  if (event.target && event.target.id === 'settings-modal') {
+    closeSettingsModal();
+  }
+}
+
+async function loadEtsyConfig() {
+  try {
+    const res = await fetch('/api/etsy/config');
+    const data = await res.json();
+    if (data.api_key) document.getElementById('etsy_key').value = data.api_key;
+    if (data.shared_secret) document.getElementById('etsy_shared_secret').value = data.shared_secret;
+    if (data.shop_id) document.getElementById('etsy_shop_id').value = data.shop_id;
+  } catch (e) { /* silent */ }
+}
+
+async function saveEtsyConfig() {
+  const api_key = document.getElementById('etsy_key').value.trim();
+  const shared_secret = document.getElementById('etsy_shared_secret').value.trim();
+  const shop_id = document.getElementById('etsy_shop_id').value.trim();
+  try {
+    await fetch('/api/etsy/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key, shared_secret, shop_id })
+    });
+    alert('Etsy credentials saved successfully!');
+  } catch (e) {
+    alert('Failed to save Etsy credentials: ' + e);
+  }
+}
+
+async function connectEtsy() {
+  await saveEtsyConfig();
+  try {
+    const res = await fetch('/api/etsy/auth', { method: 'POST' });
+    const data = await res.json();
+    if (data.auth_url) {
+      window.open(data.auth_url, '_blank');
+    } else {
+      alert(data.message || 'Error generating Etsy auth URL');
+    }
+  } catch (e) {
+    alert('Etsy auth failed: ' + e);
+  }
+}
+
+async function loadTursoConfigUI() {
+  try {
+    const res = await fetch('/api/getTursoConfig');
+    const data = await res.json();
+    if (data.turso_url) document.getElementById('turso_url').value = data.turso_url;
+    if (data.turso_token) document.getElementById('turso_token').value = data.turso_token;
+  } catch (e) { /* silent */ }
+}
+
+async function saveTursoConfigUI() {
+  const turso_url = document.getElementById('turso_url').value.trim();
+  const turso_token = document.getElementById('turso_token').value.trim();
+  try {
+    await fetch('/api/saveTursoConfig', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turso_url, turso_token })
+    });
+    alert('Turso config saved successfully!');
+  } catch (e) {
+    alert('Failed to save Turso config: ' + e);
+  }
+}
+
+async function loadDbPathUI() {
+  try {
+    const res = await fetch('/api/getDbPath');
+    const data = await res.json();
+    const dbPath = data.db_Path || data.db_path;
+    if (dbPath) document.getElementById('db_path_input').value = dbPath;
+  } catch (e) { /* silent */ }
+}
+
+async function saveDbPathUI() {
+  const db_path = document.getElementById('db_path_input').value.trim();
+  try {
+    await fetch('/api/setDbPath', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ db_path: db_path, db_Path: db_path })
+    });
+    alert('Database path updated!');
+  } catch (e) {
+    alert('Failed to update DB path: ' + e);
+  }
+}
 

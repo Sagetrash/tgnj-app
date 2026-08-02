@@ -28,6 +28,7 @@ class database:
                 pass
             
             self.conn.execute("CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS _etsy_config (key TEXT PRIMARY KEY, value TEXT);")
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_inventory_updated_at ON inventory(updated_at);")
             self.conn.execute("UPDATE inventory SET updated_at = datetime('now') WHERE updated_at = '' OR updated_at IS NULL;")
             self.conn.commit()
@@ -269,6 +270,19 @@ class database:
                 if curs:
                     curs.close()
 
+    def get_all_sku_groups(self) -> list[str]:
+        """Return distinct non-deleted SKU Groups."""
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute("SELECT DISTINCT sku_group FROM inventory WHERE COALESCE(is_deleted, 0) = 0 ORDER BY sku_group ASC;")
+                return [row['sku_group'] for row in curs.fetchall() if row['sku_group']]
+            except sql.Error:
+                return []
+            finally:
+                if curs:
+                    curs.close()
+
     def get_count(self) -> int:
         """Return total non-deleted row count."""
         with self.conn as conn:
@@ -301,6 +315,28 @@ class database:
                 if curs:
                     curs.close()
 
+
+    def get_etsy_config(self, key: str) -> str:
+        """Fetch a value from _etsy_config table."""
+        with self.conn as conn:
+            curs = conn.cursor()
+            curs.execute("SELECT value FROM _etsy_config WHERE key = ?;", (key,))
+            row = curs.fetchone()
+            return row["value"] if row else ""
+
+    def set_etsy_config(self, key: str, value: str):
+        """Set a key-value pair in _etsy_config table."""
+        with self.conn as conn:
+            curs = conn.cursor()
+            curs.execute("INSERT OR REPLACE INTO _etsy_config (key, value) VALUES (?, ?);", (key, str(value)))
+            conn.commit()
+
+    def get_all_etsy_config(self) -> dict:
+        """Fetch all key-value pairs from _etsy_config table."""
+        with self.conn as conn:
+            curs = conn.cursor()
+            curs.execute("SELECT key, value FROM _etsy_config;")
+            return dict(curs.fetchall())
 
 if __name__ == "__main__":
     pass

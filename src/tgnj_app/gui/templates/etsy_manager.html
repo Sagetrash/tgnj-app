@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Etsy Operations Hub - TakshGems</title>
+    <link rel="stylesheet" href="{{url_for('static',filename='style.css')}}" />
+    <link
+      rel="icon"
+      href="{{ url_for('static', filename='logo.ico') }}"
+      type="image/x-icon"
+    />
+  </head>
+  <body>
+    <header>
+      <div class="header-brand">
+        <h1>🧡 TakshGems Etsy Operations Hub</h1>
+      </div>
+      
+      <div class="header-actions">
+        <button type="button" class="hdr-btn" onclick="window.location.href='/'">⬅ Back to Inventory</button>
+        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">⚙️ Settings</button>
+      </div>
+    </header>
+
+    <div class="etsy-hub-container">
+      <!-- Top Overview Row -->
+      <div class="etsy-card shop-status-card">
+        <div class="card-header">
+          <h2>🏬 TakshGems Shop Status</h2>
+          <span id="shop-conn-badge" class="badge badge-listed">Connected (ID: 24364290)</span>
+        </div>
+        <div class="card-body status-body-grid">
+          <div class="stat-box">
+            <span class="stat-label">Active Listings</span>
+            <span id="stat-active-count" class="stat-value">--</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Draft Listings</span>
+            <span id="stat-draft-count" class="stat-value">--</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Total Sold (Etsy)</span>
+            <span id="stat-sold-count" class="stat-value">--</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-add" onclick="syncEtsyOrdersHub()">⚡ Sync Etsy Sales Receipts</button>
+          <button class="hdr-btn" onclick="reauthEtsyHub()">🔑 Re-Authenticate OAuth PKCE</button>
+        </div>
+      </div>
+
+      <!-- Bulk Publisher Section -->
+      <div class="etsy-card bulk-publisher-card">
+        <div class="card-header">
+          <h2>🚀 Bulk Draft Publisher & S3 Photo Uploader</h2>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Bulk create draft listings on Etsy and auto-upload Photos A & B from AWS S3 in one click.</p>
+          <div class="bulk-form-grid">
+            <div class="field-group">
+              <label for="bulk_group">Target SKU Group</label>
+              <select id="bulk_group" class="modal-input">
+                <option value="ALL">ALL SKU GROUPS</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="bulk_price_per_ct">Default Price Per Carat ($ / ct)</label>
+              <input type="number" step="0.01" id="bulk_price_per_ct" class="modal-input" placeholder="e.g. 2.50" />
+            </div>
+            <div class="field-group">
+              <label for="bulk_fixed_price">Default Fixed Price ($ USD)</label>
+              <input type="number" step="0.01" id="bulk_fixed_price" class="modal-input" placeholder="e.g. 12.99" value="12.99" />
+            </div>
+          </div>
+          <div class="bulk-action-bar">
+            <button class="btn btn-add" onclick="runBulkPublisher()">🚀 Bulk Create Drafts & Upload Photos</button>
+          </div>
+          <div id="bulk-progress-container" class="progress-container" style="display:none;">
+            <div id="bulk-progress-bar" class="progress-bar"></div>
+            <span id="bulk-progress-text" class="progress-text">Processing...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Orders / Sales Receipts Table -->
+      <div class="etsy-card orders-log-card">
+        <div class="card-header">
+          <h2>📦 Recent Etsy Sales & Order Sync Log</h2>
+          <button class="hdr-btn" onclick="fetchRecentOrdersLog()">🔄 Refresh Orders</button>
+        </div>
+        <div class="card-body table-container">
+          <table class="etsy-orders-table">
+            <thead>
+              <tr>
+                <th>Receipt ID</th>
+                <th>Date</th>
+                <th>Buyer Country</th>
+                <th>Gemstone SKU</th>
+                <th>Price (USD)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="orders-log-tbody">
+              <tr>
+                <td colspan="6" class="muted-text text-center">Click "Sync Etsy Sales Receipts" to pull orders.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal Popup -->
+    <div id="settings-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>⚙️ Configuration & Secrets</h2>
+          <button class="modal-close-btn" onclick="closeSettingsModal()">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+          <!-- Etsy Section -->
+          <div class="config-section">
+            <h3>🧡 TakshGems Etsy Integration</h3>
+            <p class="section-desc">Manage Etsy OpenAPI v3 Keystring & Credentials.</p>
+            <div class="field-group">
+              <label for="etsy_key">Etsy API Keystring (Client ID)</label>
+              <input type="text" id="etsy_key" class="modal-input" placeholder="Enter Etsy Keystring" />
+            </div>
+            <div class="field-group">
+              <label for="etsy_shared_secret">Etsy Shared Secret (Client Secret)</label>
+              <input type="password" id="etsy_shared_secret" class="modal-input" placeholder="Enter Etsy Shared Secret" />
+            </div>
+            <div class="field-group">
+              <label for="etsy_shop_id">TakshGems Shop ID / Name</label>
+              <input type="text" id="etsy_shop_id" class="modal-input" placeholder="e.g. takshgems" />
+            </div>
+            <div class="modal-btn-row">
+              <button class="modal-btn primary-btn" onclick="saveEtsyConfig()">Save Etsy Credentials</button>
+              <button class="modal-btn accent-btn" onclick="connectEtsy()">Connect TakshGems Shop ↗</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <span>The term 'Etsy' is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.</span>
+        </div>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static',filename='script.js')}}"></script>
+    <script src="{{ url_for('static',filename='etsy_hub.js')}}"></script>
+  </body>
+</html>

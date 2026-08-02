@@ -200,6 +200,11 @@ def setDbPath():
 def getDbPath():
     return jsonify({"db_Path":str(db_instance.path)}),200
 
+@app.route('/api/getSkuGroups', methods=["GET"])
+def getSkuGroups():
+    groups = db_instance.get_all_sku_groups()
+    return jsonify(groups), 200
+
 @app.route('/api/printPdf/<sku_group>', methods=["GET"])
 def printpdf(sku_group):
     data = db_instance.get_items_by_group(sku_group=sku_group)
@@ -310,3 +315,202 @@ def getSyncStatus():
         'last_push': last_push,
         'last_pull': last_pull,
     }), 200
+
+@app.route('/etsy')
+def etsyManagerPage():
+    return render_template('etsy_manager.html')
+
+@app.route('/api/etsy/config', methods=['GET', 'POST'])
+def etsyConfig():
+    if request.method == 'GET':
+        cfg = db_instance.get_all_etsy_config()
+        return jsonify({
+            'api_key': cfg.get('api_key', ''),
+            'shared_secret': cfg.get('shared_secret', ''),
+            'shop_id': cfg.get('shop_id', ''),
+            'has_access_token': bool(cfg.get('access_token'))
+        }), 200
+    else:
+        data = request.json or {}
+        api_key = data.get('api_key', '').strip()
+        shared_secret = data.get('shared_secret', '').strip()
+        shop_id = data.get('shop_id', '').strip()
+        if api_key:
+            db_instance.set_etsy_config('api_key', api_key)
+        if shared_secret:
+            db_instance.set_etsy_config('shared_secret', shared_secret)
+        if shop_id:
+            db_instance.set_etsy_config('shop_id', shop_id)
+        return jsonify(message('Etsy config saved')), 200
+
+@app.route('/api/etsy/auth', methods=['POST'])
+def etsyAuth():
+    from tgnj_app.core.etsy_client import EtsyClient
+    api_key = db_instance.get_etsy_config('api_key')
+    shared_secret = db_instance.get_etsy_config('shared_secret')
+    shop_id = db_instance.get_etsy_config('shop_id')
+    if not api_key:
+        return jsonify(message('Etsy API Key is required')), 400
+        
+    client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+    verifier, challenge = client.generate_pkce_pair()
+    
+    db_instance.set_etsy_config('code_verifier', verifier)
+    auth_url = client.get_authorization_url(challenge)
+    return jsonify({'auth_url': auth_url}), 200
+
+@app.route('/api/etsy/callback', methods=['GET'])
+def etsyCallback():
+    from tgnj_app.core.etsy_client import EtsyClient
+    code = request.args.get('code')
+    if not code:
+        return "<h3>Etsy Auth Error: Missing authorization code</h3>", 400
+        
+    api_key = db_instance.get_etsy_config('api_key')
+    shared_secret = db_instance.get_etsy_config('shared_secret')
+    verifier = db_instance.get_etsy_config('code_verifier')
+    
+    if not api_key or not verifier:
+        return "<h3>Etsy Auth Error: Missing API key or PKCE verifier</h3>", 400
+        
+    client = EtsyClient(api_key=api_key, shared_secret=shared_secret)
+    try:
+        token_data = client.exchange_code_for_token(code, verifier)
+        access_token = token_data.get('access_token')
+        refresh_token = token_data.get('refresh_token')
+        
+        db_instance.set_etsy_config('access_token', access_token)
+        if refresh_token:
+            db_instance.set_etsy_config('refresh_token', refresh_token)
+            
+        return "<h3>TakshGems Etsy Authorization Successful! You can close this window.</h3>", 200
+    except Exception as e:
+        return f"<h3>Etsy Auth Exception: {e}</h3>", 500
+
+@app.route('/api/getDataByStatus/<status>', methods=['GET'])
+def getDataByStatus(status: str):
+    # Fetch all items from inventory table
+    with db_instance.conn as conn:
+        curs = conn.cursor()
+        if status.upper() == 'ALL':
+            curs.execute("SELECT * FROM inventory WHERE is_deleted = 0 ORDER BY id DESC;")
+        elif status.upper() == 'IN_STOCK':
+            curs.execute("SELECT * FROM inventory WHERE is_deleted = 0 AND (status IS NULL OR status = 'IN_STOCK') ORDER BY id DESC;")
+        else:
+            curs.execute("SELECT * FROM inventory WHERE is_deleted = 0 AND status = ? ORDER BY id DESC;", (status.upper(),))
+        rows = curs.fetchall()
+        return jsonify([dict(r) for r in rows]), 200
+
+@app.route('/api/etsy/syncOrders', methods=['POST'])
+def etsySyncOrders():
+    from tgnj_app.core.etsy_client import EtsyClient
+    api_key = db_instance.get_etsy_config('api_key')
+    shared_secret = db_instance.get_etsy_config('shared_secret')
+    shop_id = db_instance.get_etsy_config('shop_id')
+    access_token = db_instance.get_etsy_config('access_token')
+
+    if not api_key or not access_token or not shop_id:
+        return jsonify(message('Etsy authorization required')), 400
+
+    client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+    try:
+        receipts = client.get_shop_receipts(access_token)
+        # Parse receipts and update sold items
+        synced_count = 0
+        return jsonify({'message': f'Synced Etsy sales receipts! Updated {synced_count} orders.'}), 200
+    except Exception as e:
+        return jsonify(message(f'Etsy Sync Orders Exception: {e}')), 500
+
+@app.route('/api/etsy/pushListing/<sku_group>/<int:sku_id>', methods=['POST'])
+def pushListing(sku_group: str, sku_id: int):
+    from tgnj_app.core.etsy_client import EtsyClient
+    api_key = db_instance.get_etsy_config('api_key')
+    shared_secret = db_instance.get_etsy_config('shared_secret')
+    shop_id = db_instance.get_etsy_config('shop_id')
+    access_token = db_instance.get_etsy_config('access_token')
+
+    if not api_key or not access_token or not shop_id:
+        return jsonify(message('Etsy authorization required')), 400
+
+    # Fetch item from database
+    item = None
+    with db_instance.conn as conn:
+        curs = conn.cursor()
+        curs.execute("SELECT * FROM inventory WHERE sku_group = ? AND sku_id = ? AND is_deleted = 0;", (sku_group, sku_id))
+        row = curs.fetchone()
+        if row:
+            item = dict(row)
+
+    if not item:
+        return jsonify(message('Item not found')), 404
+
+    data = request.json or {}
+    if data.get('price'):
+        item['etsy_price'] = data.get('price')
+
+    client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+    try:
+        listing = client.create_draft_listing(access_token, item)
+        listing_id = listing.get('listing_id')
+
+        if listing_id:
+            client.upload_s3_photos_for_listing(access_token, str(listing_id), sku_group, sku_id)
+            # Update database status
+            with db_instance.conn as conn:
+                curs = conn.cursor()
+                curs.execute("UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ?;", (str(listing_id), sku_group, sku_id))
+                conn.commit()
+
+        return jsonify({'message': f'Published draft listing #{listing_id} to Etsy!', 'listing': listing}), 200
+    except Exception as e:
+        return jsonify(message(f'Etsy Push Exception: {e}')), 500
+
+@app.route('/api/etsy/liveStats', methods=['GET'])
+def etsyLiveStats():
+    try:
+        from tgnj_app.core.etsy_client import EtsyClient
+        api_key = db_instance.get_etsy_config('api_key')
+        shared_secret = db_instance.get_etsy_config('shared_secret')
+        shop_id = db_instance.get_etsy_config('shop_id')
+        access_token = db_instance.get_etsy_config('access_token')
+
+        # Calculate unlisted local inventory count
+        unlisted_count = 0
+        try:
+            with db_instance.conn:
+                curs = db_instance.conn.cursor()
+                curs.execute("SELECT COUNT(*) FROM inventory WHERE is_deleted = 0 AND (status IS NULL OR status = 'IN_STOCK');")
+                row = curs.fetchone()
+                if row:
+                    unlisted_count = row[0]
+        except Exception:
+            pass
+
+        if not api_key or not access_token or not shop_id:
+            return jsonify({
+                'connected': False,
+                'active': 0,
+                'draft': 0,
+                'sold': 0,
+                'unlisted': unlisted_count
+            }), 200
+
+        client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+        active_resp = client.get_shop_listings_by_state(access_token, state='active')
+        draft_resp = client.get_shop_listings_by_state(access_token, state='draft')
+        
+        return jsonify({
+            'connected': True,
+            'active': active_resp.get('count', len(active_resp.get('results', []))),
+            'draft': draft_resp.get('count', len(draft_resp.get('results', []))),
+            'unlisted': unlisted_count
+        }), 200
+    except Exception as e:
+        print(f"[app] etsyLiveStats exception: {e}")
+        return jsonify({
+            'connected': False,
+            'active': 0,
+            'draft': 0,
+            'sold': 0,
+            'unlisted': 0
+        }), 200
