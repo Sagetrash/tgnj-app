@@ -868,6 +868,47 @@ def bulkPush():
                 draft_times.append(t_draft)
 
                 listing_id = listing.get('listing_id')
+                if not listing_id:
+                    raise Exception(f"Etsy API did not return a valid listing_id: {listing}")
+
+                # Update dedicated property attributes (Primary Color, Craft Type, Shape, Stone Source, Cabochon, Polished)
+                try:
+                    COLOR_MAP = {
+                        'black': (1, 'Black'), 'blue': (2, 'Blue'), 'brown': (3, 'Brown'), 'green': (4, 'Green'),
+                        'gray': (5, 'Gray'), 'orange': (6, 'Orange'), 'pink': (7, 'Pink'), 'purple': (8, 'Purple'),
+                        'red': (9, 'Red'), 'white': (10, 'White'), 'yellow': (11, 'Yellow'), 'gold': (1214, 'Gold'),
+                        'silver': (1215, 'Silver'), 'bronze': (1216, 'Bronze'), 'copper': (1218, 'Copper'),
+                        'clear': (1219, 'Clear'), 'rainbow': (1220, 'Rainbow'), 'turquoise': (2, 'Blue')
+                    }
+                    if primary_color and primary_color.strip().lower() in COLOR_MAP:
+                        c_id, c_name = COLOR_MAP[primary_color.strip().lower()]
+                        client.update_listing_property(current_access, listing_id, 200, [c_name], [c_id])
+                    
+                    # Craft Type (prop: 47626759760 -> val_id: 561)
+                    client.update_listing_property(current_access, listing_id, 47626759760, ["Jewelry making"], [561])
+                    
+                    # Shape (prop: 47626759726)
+                    SHAPE_MAP = {
+                        'oval': (353, 'Oval'), 'pear': (354, 'Pear'), 'cushion': (331, 'Cushion'),
+                        'heart': (344, 'Heart'), 'marquise': (349, 'Marquise'), 'round': (364, 'Round'),
+                        'teardrop': (375, 'Teardrop'), 'triangle': (376, 'Triangle'), 'trillion': (377, 'Trillion'),
+                        'rectangle': (361, 'Rectangle'), 'square': (371, 'Square'), 'emerald': (339, 'Emerald')
+                    }
+                    shape_raw = (item.get("shape") or "").strip().lower()
+                    if shape_raw in SHAPE_MAP:
+                        s_id, s_name = SHAPE_MAP[shape_raw]
+                        client.update_listing_property(current_access, listing_id, 47626759726, [s_name], [s_id])
+
+                    # Stone Source (prop: 570246213610 -> Natural: 5104)
+                    client.update_listing_property(current_access, listing_id, 570246213610, ["Natural"], [5104])
+
+                    # Cabochon (prop: 136027449574 -> Yes: 2313)
+                    client.update_listing_property(current_access, listing_id, 136027449574, ["Yes"], [2313])
+
+                    # Polished (prop: 570246213541 -> Yes: 4557)
+                    client.update_listing_property(current_access, listing_id, 570246213541, ["Yes"], [4557])
+                except Exception as pe:
+                    print(f"[bulkPush] Property update notice for {listing_id}: {pe}")
 
                 if listing_id:
                     t1 = time.perf_counter()

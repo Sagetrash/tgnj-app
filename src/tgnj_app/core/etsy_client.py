@@ -242,6 +242,30 @@ class EtsyClient:
             print(f"[etsy_client] create_draft_listing exception: {e}")
             raise e
 
+    def update_listing_property(self, access_token: str, listing_id: str, property_id: int, values: list, value_ids: list = None) -> dict:
+        """
+        Updates a specific property on an Etsy listing using PUT /v3/application/shops/{shop_id}/listings/{listing_id}/properties/{property_id}.
+        """
+        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings/{listing_id}/properties/{property_id}"
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        payload = {
+            "values": values
+        }
+        if value_ids:
+            payload["value_ids"] = value_ids
+
+        req = Request(url, data=urlencode(payload, doseq=True).encode("utf-8"), headers=headers, method="PUT")
+        try:
+            with urlopen(req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            print(f"[etsy_client] update_listing_property notice for prop #{property_id}: {e}")
+            return {}
+
     def update_listing_inventory(self, access_token: str, listing_id: str, sku: str, price: float, quantity: int = 1, readiness_state_id: int = None) -> dict:
         """
         Updates the product inventory for an Etsy listing to assign its SKU and price.
