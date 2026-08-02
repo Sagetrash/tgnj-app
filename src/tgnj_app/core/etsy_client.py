@@ -227,6 +227,46 @@ class EtsyClient:
             print(f"[etsy_client] create_draft_listing exception: {e}")
             raise e
 
+    def update_listing_inventory(self, access_token: str, listing_id: str, sku: str, price: float, quantity: int = 1) -> dict:
+        """
+        Updates the product inventory for an Etsy listing to assign its SKU and price.
+        Sends PUT /v3/application/listings/{listing_id}/inventory.
+        """
+        url = f"{ETSY_API_BASE}/listings/{listing_id}/inventory"
+        payload = {
+            "products": [
+                {
+                    "sku": sku,
+                    "offerings": [
+                        {
+                            "price": float(price),
+                            "quantity": int(quantity),
+                            "is_enabled": True
+                        }
+                    ]
+                }
+            ]
+        }
+        data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        req = Request(url, data=data, headers=headers, method="PUT")
+        try:
+            with urlopen(req) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                print(f"[etsy_client] Successfully assigned SKU '{sku}' to Etsy listing #{listing_id}!")
+                return result
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            print(f"[etsy_client] update_listing_inventory error: {e.code} - {err_body}")
+            return {}
+        except Exception as e:
+            print(f"[etsy_client] update_listing_inventory exception: {e}")
+            return {}
+
     def upload_listing_image(self, access_token: str, listing_id: str, image_bytes: bytes, filename: str = "image.jpg", rank: int = 1) -> dict:
         """Upload a binary image to an Etsy listing via multipart/form-data."""
         url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings/{listing_id}/images"

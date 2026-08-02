@@ -536,6 +536,8 @@ def pushListing(sku_group: str, sku_id: int):
         listing_id = listing.get('listing_id')
 
         if listing_id:
+            sku_str = f"{sku_group.upper()}-{sku_id:03d}"
+            client.update_listing_inventory(access_token, str(listing_id), sku_str, item.get('etsy_price', 12.99))
             client.upload_s3_photos_for_listing(access_token, str(listing_id), sku_group, sku_id)
             # Update database status
             with db_instance.conn as conn:
@@ -755,6 +757,9 @@ def bulkPush():
                 listing_id = listing.get('listing_id')
 
                 if listing_id:
+                    # Assign SKU and price to Etsy inventory product offerings
+                    client.update_listing_inventory(current_access, str(listing_id), sku_key, item.get('etsy_price', 12.99))
+
                     # Upload photos
                     client.upload_s3_photos_for_listing(current_access, str(listing_id), sku_group, sku_id)
                     # Update database status
