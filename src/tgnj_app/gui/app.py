@@ -819,14 +819,20 @@ def bulkPush():
         padded_sku = str(sku_id).zfill(3)
         sku_key = f"{sku_group}-{padded_sku}"
             
-        # Fetch item from database
+        # Fetch item from database using thread-safe connection
+        import sqlite3 as sql
+        db_uri = f"{db_instance.path.as_uri()}?mode=rw"
         item = None
-        with db_instance.conn as conn:
+        conn = sql.connect(db_uri, uri=True)
+        conn.row_factory = sql.Row
+        try:
             curs = conn.cursor()
             curs.execute("SELECT * FROM inventory WHERE sku_group = ? AND sku_id = ? AND is_deleted = 0;", (sku_group, sku_id))
             row = curs.fetchone()
             if row:
                 item = dict(row)
+        finally:
+            conn.close()
 
         if not item:
             return {"sku": sku_key, "error": "Item not found in database", "status": "failed", "is_success": False}
@@ -911,17 +917,20 @@ def bulkPush():
                 client.upload_s3_photos_for_listing(current_access, str(listing_id), sku_group, sku_id)
                 t_photos = time.perf_counter() - t2
 
-                # Update database status
-                with db_instance.conn as conn:
-                    curs = conn.cursor()
-                    curs.execute("""
+                # Update database status using thread-safe connection
+                conn_w = sql.connect(db_uri, uri=True)
+                try:
+                    curs_w = conn_w.cursor()
+                    curs_w.execute("""
                         UPDATE inventory 
                         SET status = 'LISTED_ETSY', 
                             etsy_listing_id = ?, 
                             updated_at = datetime('now') 
                         WHERE sku_group = ? AND sku_id = ?;
                     """, (str(listing_id), sku_group, sku_id))
-                    conn.commit()
+                    conn_w.commit()
+                finally:
+                    conn_w.close()
                 
                 item_total_time = time.perf_counter() - item_start_time
                 print(f"[bulkPush] {sku_key} listed in {item_total_time:.2f}s (Draft: {t_draft:.2f}s | SKU: {t_inv:.2f}s | Photos: {t_photos:.2f}s)")
@@ -953,10 +962,34 @@ def bulkPush():
 
         return {"sku": sku_key, "error": "Max retries reached", "status": "failed", "is_success": False}
 
+    # Deduplicate input items by (sku_group, sku_id) key
+    seen = set()
+    unique_items = []
+    for item in items:
+        key = (item.get('sku_group'), item.get('sku_id'))
+        if key not in seen and key[0] is not None and key[1] is not None:
+            seen.add(key)
+            unique_items.append(item)
+    items = unique_items
+    total = len(items)
+
+    def process_chunk(item_list):
+        chunk_results = []
+        for req_item in item_list:
+            res = process_single_item(req_item)
+            if res:
+                chunk_results.append(res)
+        return chunk_results
+
+    chunk_even = items[0::2]
+    chunk_odd = items[1::2]
+    chunks = [c for c in [chunk_even, chunk_odd] if len(c) > 0]
+
     from concurrent.futures import ThreadPoolExecutor
-    num_workers = min(2, len(items)) if len(items) > 1 else 1
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        item_results = list(executor.map(process_single_item, items))
+    with ThreadPoolExecutor(max_workers=max(1, len(chunks))) as executor:
+        batch_outputs = list(executor.map(process_chunk, chunks))
+
+    item_results = [res for chunk in batch_outputs for res in chunk]
 
     for res in item_results:
         if not res:
