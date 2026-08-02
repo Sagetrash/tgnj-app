@@ -130,9 +130,9 @@ class EtsyClient:
             print(f"[etsy_client] get_readiness_states error: {e}")
             return []
 
-    def create_draft_listing(self, access_token: str, item: dict, taxonomy_id: int = 1219, shipping_profile_id: int = None, readiness_state_id: int = None) -> dict:
+    def create_draft_listing(self, access_token: str, item: dict, taxonomy_id: int = 6648, shipping_profile_id: int = None, readiness_state_id: int = None) -> dict:
         """
-        Creates a draft listing on Etsy for TakshGems under Cabochons category (taxonomy_id=1219).
+        Creates a draft listing on Etsy for TakshGems under Cabochons category (taxonomy_id=6648).
         """
         if not shipping_profile_id:
             profiles = self.get_shipping_profiles(access_token)
