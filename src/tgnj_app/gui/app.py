@@ -445,11 +445,28 @@ def etsySyncOrders():
                     if len(parts) >= 2 and parts[1].isdigit():
                         grp = parts[0]
                         s_id = int(parts[1])
-                        curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = 'Etsy', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');", (price_amount, listing_id, grp, s_id))
+                        curs.execute("""
+                            UPDATE inventory 
+                            SET status = 'SOLD', 
+                                sold_price = ?, 
+                                sold_channel = 'Etsy', 
+                                etsy_listing_id = ?, 
+                                sold_at = COALESCE(NULLIF(sold_at, ''), datetime('now')), 
+                                updated_at = datetime('now') 
+                            WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');
+                        """, (price_amount, listing_id, grp, s_id))
                         if curs.rowcount > 0:
                             synced_count += curs.rowcount
                 elif listing_id:
-                    curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = 'Etsy' WHERE etsy_listing_id = ? AND (status IS NULL OR status != 'SOLD');", (price_amount, listing_id))
+                    curs.execute("""
+                        UPDATE inventory 
+                        SET status = 'SOLD', 
+                            sold_price = ?, 
+                            sold_channel = 'Etsy', 
+                            sold_at = COALESCE(NULLIF(sold_at, ''), datetime('now')), 
+                            updated_at = datetime('now') 
+                        WHERE etsy_listing_id = ? AND (status IS NULL OR status != 'SOLD');
+                    """, (price_amount, listing_id))
                     if curs.rowcount > 0:
                         synced_count += curs.rowcount
 
@@ -469,7 +486,16 @@ def etsySyncOrders():
                     if len(parts) >= 2 and parts[1].isdigit():
                         grp = parts[0]
                         s_id = int(parts[1])
-                        curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = 'Etsy', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');", (price_amount, listing_id, grp, s_id))
+                        curs.execute("""
+                            UPDATE inventory 
+                            SET status = 'SOLD', 
+                                sold_price = ?, 
+                                sold_channel = 'Etsy', 
+                                etsy_listing_id = ?, 
+                                sold_at = COALESCE(NULLIF(sold_at, ''), datetime('now')), 
+                                updated_at = datetime('now') 
+                            WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');
+                        """, (price_amount, listing_id, grp, s_id))
                         if curs.rowcount > 0:
                             synced_count += curs.rowcount
 
@@ -496,7 +522,15 @@ def markSold(sku_group: str, sku_id: int):
     
     with db_instance.conn as conn:
         curs = conn.cursor()
-        curs.execute("UPDATE inventory SET status = 'SOLD', sold_price = ?, sold_channel = ? WHERE sku_group = ? AND sku_id = ?;", (price, channel, sku_group, sku_id))
+        curs.execute("""
+            UPDATE inventory 
+            SET status = 'SOLD', 
+                sold_price = ?, 
+                sold_channel = ?, 
+                sold_at = datetime('now'), 
+                updated_at = datetime('now') 
+            WHERE sku_group = ? AND sku_id = ?;
+        """, (price, channel, sku_group, sku_id))
         conn.commit()
         if curs.rowcount > 0:
             trigger_async_sync()
@@ -508,7 +542,12 @@ def markSold(sku_group: str, sku_id: int):
 def restoreItem(sku_group: str, sku_id: int):
     with db_instance.conn as conn:
         curs = conn.cursor()
-        curs.execute("UPDATE inventory SET status = 'IN_STOCK' WHERE sku_group = ? AND sku_id = ?;", (sku_group, sku_id))
+        curs.execute("""
+            UPDATE inventory 
+            SET status = 'IN_STOCK', 
+                updated_at = datetime('now') 
+            WHERE sku_group = ? AND sku_id = ?;
+        """, (sku_group, sku_id))
         conn.commit()
         if curs.rowcount > 0:
             trigger_async_sync()
@@ -555,8 +594,15 @@ def pushListing(sku_group: str, sku_id: int):
             # Update database status
             with db_instance.conn as conn:
                 curs = conn.cursor()
-                curs.execute("UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ?;", (str(listing_id), sku_group, sku_id))
+                curs.execute("""
+                    UPDATE inventory 
+                    SET status = 'LISTED_ETSY', 
+                        etsy_listing_id = ?, 
+                        updated_at = datetime('now') 
+                    WHERE sku_group = ? AND sku_id = ?;
+                """, (str(listing_id), sku_group, sku_id))
                 conn.commit()
+            trigger_async_sync()
 
         return jsonify({'message': f'Published draft listing #{listing_id} to Etsy!', 'listing': listing}), 200
     except Exception as e:
@@ -587,7 +633,13 @@ def sync_deleted_etsy_drafts(client, access_token):
             for row in rows:
                 loc_id = str(row['etsy_listing_id'])
                 if loc_id not in live_ids:
-                    curs.execute("UPDATE inventory SET status = 'IN_STOCK', etsy_listing_id = NULL WHERE sku_group = ? AND sku_id = ?;", (row['sku_group'], row['sku_id']))
+                    curs.execute("""
+                        UPDATE inventory 
+                        SET status = 'IN_STOCK', 
+                            etsy_listing_id = NULL, 
+                            updated_at = datetime('now') 
+                        WHERE sku_group = ? AND sku_id = ?;
+                    """, (row['sku_group'], row['sku_id']))
                     reset_count += curs.rowcount
 
             if reset_count > 0:
@@ -820,7 +872,13 @@ def bulkPush():
                     # Update database status
                     with db_instance.conn as conn:
                         curs = conn.cursor()
-                        curs.execute("UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ?;", (str(listing_id), sku_group, sku_id))
+                        curs.execute("""
+                            UPDATE inventory 
+                            SET status = 'LISTED_ETSY', 
+                                etsy_listing_id = ?, 
+                                updated_at = datetime('now') 
+                            WHERE sku_group = ? AND sku_id = ?;
+                        """, (str(listing_id), sku_group, sku_id))
                         conn.commit()
                     
                     item_total_time = time.perf_counter() - item_start_time
@@ -871,6 +929,9 @@ def bulkPush():
 
     print(f"[bulkPush] BATCH COMPLETE: Pushed {success}/{total} items in {total_batch_duration:.2f}s (avg {avg_per_item:.2f}s/item)")
     print(f"[bulkPush] Averages: Draft creation = {avg_draft:.2f}s | SKU inventory = {avg_inv:.2f}s | Photo uploads = {avg_photos:.2f}s")
+
+    if success > 0:
+        trigger_async_sync()
 
     return jsonify({
         "total": total,

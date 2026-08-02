@@ -73,7 +73,14 @@ class database:
             self.conn.execute("CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);")
             self.conn.execute("CREATE TABLE IF NOT EXISTS _etsy_config (key TEXT PRIMARY KEY, value TEXT);")
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_inventory_updated_at ON inventory(updated_at);")
-            self.conn.execute("UPDATE inventory SET updated_at = datetime('now') WHERE updated_at = '' OR updated_at IS NULL;")
+            self.conn.execute("""
+                UPDATE inventory 
+                SET updated_at = datetime('now') 
+                WHERE updated_at = '' 
+                   OR updated_at IS NULL 
+                   OR (etsy_listing_id IS NOT NULL AND etsy_listing_id != '') 
+                   OR (status IS NOT NULL AND status != 'IN_STOCK');
+            """)
             self.conn.commit()
 
 
