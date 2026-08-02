@@ -808,13 +808,13 @@ def bulkPush():
     inv_times = []
     photo_times = []
 
-    for req_item in items:
+    def process_single_item(req_item):
         item_start_time = time.perf_counter()
         sku_group = req_item.get('sku_group')
         sku_id = req_item.get('sku_id')
         
         if sku_group is None or sku_id is None:
-            continue
+            return None
             
         padded_sku = str(sku_id).zfill(3)
         sku_key = f"{sku_group}-{padded_sku}"
@@ -829,14 +829,11 @@ def bulkPush():
                 item = dict(row)
 
         if not item:
-            failed += 1
-            results.append({"sku": sku_key, "error": "Item not found in database", "status": "failed"})
-            continue
+            return {"sku": sku_key, "error": "Item not found in database", "status": "failed", "is_success": False}
 
         # Prevent duplicate listing creation if already listed on Etsy
         if item.get('etsy_listing_id') or item.get('status') == 'LISTED_ETSY':
-            results.append({"sku": sku_key, "listing_id": item.get('etsy_listing_id'), "error": "Already listed on Etsy", "status": "skipped"})
-            continue
+            return {"sku": sku_key, "listing_id": item.get('etsy_listing_id'), "error": "Already listed on Etsy", "status": "skipped", "is_success": False}
             
         if gemstone_name:
             item['gemstone_name'] = gemstone_name
@@ -848,13 +845,11 @@ def bulkPush():
         # Attempt listing creation with automatic token refresh and rate limit retries
         max_retries = 3
         attempt = 0
-        pushed_ok = False
 
-        while attempt < max_retries and not pushed_ok:
+        while attempt < max_retries:
             attempt += 1
             try:
                 current_access = db_instance.get_etsy_config('access_token')
-                current_refresh = db_instance.get_etsy_config('refresh_token')
 
                 t0 = time.perf_counter()
                 listing = client.create_draft_listing(
@@ -865,13 +860,12 @@ def bulkPush():
                     shop_section_id=matched_section_id
                 )
                 t_draft = time.perf_counter() - t0
-                draft_times.append(t_draft)
 
                 listing_id = listing.get('listing_id')
                 if not listing_id:
                     raise Exception(f"Etsy API did not return a valid listing_id: {listing}")
 
-                # Update dedicated property attributes (Primary Color, Craft Type, Shape, Stone Source, Cabochon, Polished)
+                # Update dedicated property attributes
                 try:
                     COLOR_MAP = {
                         'black': (1, 'Black'), 'blue': (2, 'Blue'), 'brown': (3, 'Brown'), 'green': (4, 'Green'),
@@ -884,10 +878,8 @@ def bulkPush():
                         c_id, c_name = COLOR_MAP[primary_color.strip().lower()]
                         client.update_listing_property(current_access, listing_id, 200, [c_name], [c_id])
                     
-                    # Craft Type (prop: 47626759760 -> val_id: 561)
                     client.update_listing_property(current_access, listing_id, 47626759760, ["Jewelry making"], [561])
                     
-                    # Shape (prop: 47626759726)
                     SHAPE_MAP = {
                         'oval': (353, 'Oval'), 'pear': (354, 'Pear'), 'cushion': (331, 'Cushion'),
                         'heart': (344, 'Heart'), 'marquise': (349, 'Marquise'), 'round': (364, 'Round'),
@@ -899,72 +891,56 @@ def bulkPush():
                         s_id, s_name = SHAPE_MAP[shape_raw]
                         client.update_listing_property(current_access, listing_id, 47626759726, [s_name], [s_id])
 
-                    # Stone Source (prop: 570246213610 -> Natural: 5104)
                     client.update_listing_property(current_access, listing_id, 570246213610, ["Natural"], [5104])
-
-                    # Cabochon (prop: 136027449574 -> Yes: 2313)
                     client.update_listing_property(current_access, listing_id, 136027449574, ["Yes"], [2313])
-
-                    # Polished (prop: 570246213541 -> Yes: 4557)
                     client.update_listing_property(current_access, listing_id, 570246213541, ["Yes"], [4557])
                 except Exception as pe:
                     print(f"[bulkPush] Property update notice for {listing_id}: {pe}")
 
-                if listing_id:
-                    t1 = time.perf_counter()
-                    client.update_listing_inventory(
-                        current_access, 
-                        str(listing_id), 
-                        sku_key, 
-                        item.get('etsy_price', 12.99),
-                        readiness_state_id=readiness_state_id
-                    )
-                    t_inv = time.perf_counter() - t1
-                    inv_times.append(t_inv)
+                t1 = time.perf_counter()
+                client.update_listing_inventory(
+                    current_access, 
+                    str(listing_id), 
+                    sku_key, 
+                    item.get('etsy_price', 12.99),
+                    readiness_state_id=readiness_state_id
+                )
+                t_inv = time.perf_counter() - t1
 
-                    t2 = time.perf_counter()
-                    client.upload_s3_photos_for_listing(current_access, str(listing_id), sku_group, sku_id)
-                    t_photos = time.perf_counter() - t2
-                    photo_times.append(t_photos)
+                t2 = time.perf_counter()
+                client.upload_s3_photos_for_listing(current_access, str(listing_id), sku_group, sku_id)
+                t_photos = time.perf_counter() - t2
 
-                    # Update database status
-                    with db_instance.conn as conn:
-                        curs = conn.cursor()
-                        curs.execute("""
-                            UPDATE inventory 
-                            SET status = 'LISTED_ETSY', 
-                                etsy_listing_id = ?, 
-                                updated_at = datetime('now') 
-                            WHERE sku_group = ? AND sku_id = ?;
-                        """, (str(listing_id), sku_group, sku_id))
-                        conn.commit()
-                    
-                    item_total_time = time.perf_counter() - item_start_time
-                    print(f"[bulkPush] {sku_key} listed in {item_total_time:.2f}s (Draft: {t_draft:.2f}s | SKU: {t_inv:.2f}s | Photos: {t_photos:.2f}s)")
-                    
-                    success += 1
-                    results.append({
-                        "sku": sku_key, 
-                        "listing_id": listing_id, 
-                        "status": "success",
-                        "duration_sec": round(item_total_time, 2)
-                    })
-                    pushed_ok = True
-                else:
-                    failed += 1
-                    results.append({"sku": sku_key, "error": "Listing ID not returned", "status": "failed"})
-                    pushed_ok = True # Exit retry loop if unexpected response format
+                # Update database status
+                with db_instance.conn as conn:
+                    curs = conn.cursor()
+                    curs.execute("""
+                        UPDATE inventory 
+                        SET status = 'LISTED_ETSY', 
+                            etsy_listing_id = ?, 
+                            updated_at = datetime('now') 
+                        WHERE sku_group = ? AND sku_id = ?;
+                    """, (str(listing_id), sku_group, sku_id))
+                    conn.commit()
+                
+                item_total_time = time.perf_counter() - item_start_time
+                print(f"[bulkPush] {sku_key} listed in {item_total_time:.2f}s (Draft: {t_draft:.2f}s | SKU: {t_inv:.2f}s | Photos: {t_photos:.2f}s)")
+                
+                return {
+                    "sku": sku_key, 
+                    "listing_id": listing_id, 
+                    "status": "success",
+                    "duration_sec": round(item_total_time, 2),
+                    "is_success": True,
+                    "t_draft": t_draft,
+                    "t_inv": t_inv,
+                    "t_photos": t_photos
+                }
                     
             except Exception as e:
                 err_msg = str(e).lower()
                 is_auth_error = ("401" in err_msg or "expired" in err_msg or "unauthorized" in err_msg or "invalid_token" in err_msg)
-                is_rate_limit = ("429" in err_msg or "too many requests" in err_msg)
-
                 if is_auth_error and attempt < max_retries:
-                    print(f"[bulkPush] Token expired on item {sku_key} (attempt {attempt}). Refreshing token and retrying...")
-                    new_token = refresh_etsy_token_if_needed(client, current_refresh)
-                    if new_token:
-                        time.sleep(1.0)
                         continue # Retry immediately with new token
                 elif is_rate_limit and attempt < max_retries:
                     print(f"[bulkPush] Rate limit hit (429) on item {sku_key}. Sleeping 5 seconds before retry...")
