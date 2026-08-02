@@ -6,13 +6,33 @@ class database:
         try:
             self.path = Path(path).resolve()
             
-            db_uri = f"{self.path.as_uri()}?mode=rw"
+            db_uri = f"{self.path.as_uri()}?mode=rwc"
             
             self.conn = sql.connect(db_uri, uri=True, check_same_thread=False)
             
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA synchronous=NORMAL")
             self.conn.row_factory = sql.Row
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS inventory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sku_group TEXT NOT NULL,
+                    sku_id INTEGER NOT NULL,
+                    shape TEXT,
+                    weight REAL,
+                    length INTEGER,
+                    width INTEGER,
+                    depth INTEGER,
+                    created_at TEXT DEFAULT '',
+                    updated_at TEXT DEFAULT '',
+                    is_deleted INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'IN_STOCK',
+                    etsy_listing_id TEXT DEFAULT '',
+                    sold_price REAL DEFAULT 0.0,
+                    sold_channel TEXT DEFAULT '',
+                    sold_at TEXT DEFAULT ''
+                );
+            """)
             
             try:
                 self.conn.execute("ALTER TABLE inventory ADD COLUMN created_at TEXT DEFAULT ''")
