@@ -702,6 +702,7 @@ def refresh_etsy_token_if_needed(client, refresh_token):
 
 @app.route('/api/etsy/bulkPush', methods=['POST'])
 def bulkPush():
+    import time
     from tgnj_app.core.etsy_client import EtsyClient
     api_key, shared_secret, shop_id, access_token, refresh_token = get_fresh_etsy_tokens()
 
@@ -720,8 +721,27 @@ def bulkPush():
     success = 0
     failed = 0
     results = []
-    
+
+    # Pre-fetch shipping profiles & readiness state once for entire batch to avoid redundant API calls
+    shipping_profile_id = None
+    readiness_state_id = None
+    try:
+        profiles = client.get_shipping_profiles(access_token)
+        if profiles:
+            shipping_profile_id = profiles[0].get("shipping_profile_id")
+        states = client.get_readiness_states(access_token)
+        if states:
+            readiness_state_id = states[0].get("readiness_state_id")
+    except Exception as e:
+        print(f"[bulkPush] Profile pre-fetch notice: {e}")
+
+    batch_start_time = time.perf_counter()
+    draft_times = []
+    inv_times = []
+    photo_times = []
+
     for req_item in items:
+        item_start_time = time.perf_counter()
         sku_group = req_item.get('sku_group')
         sku_id = req_item.get('sku_id')
         
@@ -765,27 +785,54 @@ def bulkPush():
         while attempt < max_retries and not pushed_ok:
             attempt += 1
             try:
-                # Re-fetch current access_token from DB in case it was refreshed in a previous iteration
                 current_access = db_instance.get_etsy_config('access_token')
                 current_refresh = db_instance.get_etsy_config('refresh_token')
 
-                listing = client.create_draft_listing(current_access, item)
+                t0 = time.perf_counter()
+                listing = client.create_draft_listing(
+                    current_access, 
+                    item, 
+                    shipping_profile_id=shipping_profile_id, 
+                    readiness_state_id=readiness_state_id
+                )
+                t_draft = time.perf_counter() - t0
+                draft_times.append(t_draft)
+
                 listing_id = listing.get('listing_id')
 
                 if listing_id:
-                    # Assign SKU and price to Etsy inventory product offerings
-                    client.update_listing_inventory(current_access, str(listing_id), sku_key, item.get('etsy_price', 12.99))
+                    t1 = time.perf_counter()
+                    client.update_listing_inventory(
+                        current_access, 
+                        str(listing_id), 
+                        sku_key, 
+                        item.get('etsy_price', 12.99),
+                        readiness_state_id=readiness_state_id
+                    )
+                    t_inv = time.perf_counter() - t1
+                    inv_times.append(t_inv)
 
-                    # Upload photos
+                    t2 = time.perf_counter()
                     client.upload_s3_photos_for_listing(current_access, str(listing_id), sku_group, sku_id)
+                    t_photos = time.perf_counter() - t2
+                    photo_times.append(t_photos)
+
                     # Update database status
                     with db_instance.conn as conn:
                         curs = conn.cursor()
                         curs.execute("UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = ? WHERE sku_group = ? AND sku_id = ?;", (str(listing_id), sku_group, sku_id))
                         conn.commit()
                     
+                    item_total_time = time.perf_counter() - item_start_time
+                    print(f"[bulkPush] {sku_key} listed in {item_total_time:.2f}s (Draft: {t_draft:.2f}s | SKU: {t_inv:.2f}s | Photos: {t_photos:.2f}s)")
+                    
                     success += 1
-                    results.append({"sku": sku_key, "listing_id": listing_id, "status": "success"})
+                    results.append({
+                        "sku": sku_key, 
+                        "listing_id": listing_id, 
+                        "status": "success",
+                        "duration_sec": round(item_total_time, 2)
+                    })
                     pushed_ok = True
                 else:
                     failed += 1
@@ -814,11 +861,29 @@ def bulkPush():
                     results.append({"sku": sku_key, "error": str(e), "status": "failed"})
                     pushed_ok = True
             
-        time.sleep(0.22)
+        time.sleep(0.05)
+
+    total_batch_duration = time.perf_counter() - batch_start_time
+    avg_per_item = (total_batch_duration / success) if success > 0 else 0
+    avg_draft = (sum(draft_times) / len(draft_times)) if draft_times else 0
+    avg_inv = (sum(inv_times) / len(inv_times)) if inv_times else 0
+    avg_photos = (sum(photo_times) / len(photo_times)) if photo_times else 0
+
+    print(f"[bulkPush] BATCH COMPLETE: Pushed {success}/{total} items in {total_batch_duration:.2f}s (avg {avg_per_item:.2f}s/item)")
+    print(f"[bulkPush] Averages: Draft creation = {avg_draft:.2f}s | SKU inventory = {avg_inv:.2f}s | Photo uploads = {avg_photos:.2f}s")
 
     return jsonify({
         "total": total,
         "success": success,
         "failed": failed,
+        "metrics": {
+            "total_duration_sec": round(total_batch_duration, 2),
+            "avg_sec_per_item": round(avg_per_item, 2),
+            "step_averages_sec": {
+                "draft_creation": round(avg_draft, 2),
+                "sku_assignment": round(avg_inv, 2),
+                "photo_uploads": round(avg_photos, 2)
+            }
+        },
         "results": results
     }), 200

@@ -240,7 +240,7 @@ async function runBulkPublisher() {
   
   if (progressContainer) progressContainer.style.display = 'block';
   if (progressBar) progressBar.style.width = '10%';
-  if (progressText) progressText.textContent = 'Starting bulk push...';
+  if (progressText) progressText.textContent = `Pushing 0/${items.length}...`;
   if (logArea) logArea.innerHTML = '';
   
   const btn = document.getElementById('bulk-push-btn');
@@ -259,15 +259,22 @@ async function runBulkPublisher() {
     
     if (res.ok) {
         const data = await res.json();
+        const successCount = data.success || 0;
+        const totalCount = data.total || items.length;
         if (progressBar) progressBar.style.width = '100%';
-        if (progressText) progressText.textContent = `Done! ${data.success || 0} succeeded, ${data.failed || 0} failed.`;
+        if (progressText) progressText.textContent = `Done ${successCount}/${totalCount}`;
         
-        appendLog(`Bulk upload completed: ${data.success || 0} succeeded, ${data.failed || 0} failed out of ${data.total || 0}.`, 'success');
+        appendLog(`Done ${successCount}/${totalCount} items published successfully!`, 'success');
+        if (data.metrics) {
+            const m = data.metrics;
+            appendLog(`⚡ Benchmarks: ${m.total_duration_sec}s total (avg ${m.avg_sec_per_item}s/item) | Draft: ${m.step_averages_sec.draft_creation}s | SKU: ${m.step_averages_sec.sku_assignment}s | Photos: ${m.step_averages_sec.photo_uploads}s`, 'info');
+        }
         
         if (data.results) {
             data.results.forEach(result => {
                if (result.status === 'success') {
-                   appendLog(`[SUCCESS] ${result.sku} -> Draft #${result.listing_id} created`, 'success');
+                   const duration = result.duration_sec ? ` (${result.duration_sec}s)` : '';
+                   appendLog(`[SUCCESS] ${result.sku} -> Draft #${result.listing_id} created${duration}`, 'success');
                } else if (result.status === 'skipped') {
                    appendLog(`[INFO] ${result.sku} -> Already listed on Etsy (Draft #${result.listing_id || 'exist'})`, 'info');
                } else {

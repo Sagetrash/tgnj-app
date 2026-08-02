@@ -308,7 +308,7 @@ class EtsyClient:
             return {}
 
     def upload_s3_photos_for_listing(self, access_token: str, listing_id: str, sku_group: str, sku_id: int):
-        """Attempts to fetch Photo A and Photo B from S3 and upload to Etsy listing."""
+        """Attempts to fetch Photo A and Photo B from S3 concurrently and upload to Etsy listing."""
         group = sku_group.upper()
         sku_str = f"{group}-{int(sku_id):03d}"
         
@@ -317,17 +317,27 @@ class EtsyClient:
             (f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}B.jpg", 2)
         ]
         
-        for url, rank in photo_urls:
+        def fetch_image(item):
+            url, rank = item
             try:
                 req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
                 with urlopen(req) as resp:
                     if resp.status == 200:
-                        img_bytes = resp.read()
-                        res = self.upload_listing_image(access_token, listing_id, img_bytes, filename=f"{sku_str}_{rank}.jpg", rank=rank)
-                        if res.get("listing_image_id"):
-                            print(f"[etsy_client] Successfully uploaded image rank {rank} for listing {listing_id}!")
+                        return rank, resp.read()
             except Exception as e:
-                print(f"[etsy_client] Image fetch/upload skipped for {url}: {e}")
+                print(f"[etsy_client] Image fetch skipped for {url}: {e}")
+            return rank, None
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            downloaded = list(executor.map(fetch_image, photo_urls))
+
+        # Upload images sequentially to maintain rank order on Etsy
+        for rank, img_bytes in sorted(downloaded, key=lambda x: x[0]):
+            if img_bytes:
+                res = self.upload_listing_image(access_token, listing_id, img_bytes, filename=f"{sku_str}_{rank}.jpg", rank=rank)
+                if res.get("listing_image_id"):
+                    print(f"[etsy_client] Successfully uploaded image rank {rank} for listing {listing_id}!")
 
     def get_shop_receipts(self, access_token: str, limit: int = 25) -> dict:
         """Fetch recent sales receipts / orders for the shop."""
