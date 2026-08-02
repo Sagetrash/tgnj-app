@@ -359,13 +359,36 @@ class EtsyClient:
             (f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}B.jpg", 2)
         ]
         
+        def optimize_image_bytes(image_bytes: bytes) -> bytes:
+            """Optimizes image to max 2000px at 90% quality if larger than 1MB."""
+            if not image_bytes or len(image_bytes) < 1000000:
+                return image_bytes
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(image_bytes))
+                w, h = img.size
+                if max(w, h) > 2000:
+                    img.thumbnail((2000, 2000), Image.Resampling.LANCZOS)
+                out = io.BytesIO()
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                img.save(out, format="JPEG", quality=90, optimize=True)
+                opt_bytes = out.getvalue()
+                if len(opt_bytes) < len(image_bytes):
+                    return opt_bytes
+            except Exception as e:
+                print(f"[etsy_client] Image optimization notice: {e}")
+            return image_bytes
+
         def fetch_image(item):
             url, rank = item
             try:
                 req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
                 with urlopen(req) as resp:
                     if resp.status == 200:
-                        return rank, resp.read()
+                        raw = resp.read()
+                        return rank, optimize_image_bytes(raw)
             except Exception as e:
                 print(f"[etsy_client] Image fetch skipped for {url}: {e}")
             return rank, None
