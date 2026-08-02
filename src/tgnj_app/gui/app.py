@@ -75,13 +75,15 @@ def load_turso_config() -> tuple[str | None, str | None, int]:
 
 #_________________________________ setup __________________________________
 
+db_instance: database | None = None
+
 try:
     config = getConfig()
-    db_path = Path(config.get('db_Path'))
-    db_instance : database = database(db_path)
-except FileNotFoundError as e:
-    print(e)
-    setConfig(Path(''))
+    if config.get('db_Path'):
+        db_path = Path(config.get('db_Path'))
+        db_instance = database(db_path)
+except Exception as e:
+    print(f"[app] Database startup notice: {e}")
     
 turso_client: TursoClient | None = None
 sync_thread_started: bool = False
@@ -97,7 +99,7 @@ def start_sync_loop(interval: int = 30):
     def _loop():
         while True:
             time.sleep(interval)
-            if turso_client is not None:
+            if turso_client is not None and db_instance is not None:
                 try:
                     with sync_lock:
                         result = sync_engine.sync(db_instance, turso_client)
@@ -130,7 +132,7 @@ def getData(sku_group:str):
 def trigger_async_sync():
     """Trigger a non-blocking background sync cycle when data is added/edited/deleted."""
     def _async():
-        if turso_client is not None:
+        if turso_client is not None and db_instance is not None:
             try:
                 with sync_lock:
                     result = sync_engine.sync(db_instance, turso_client)
@@ -180,27 +182,36 @@ def editItems(group,id):
         return jsonify(message("failute updating items")), 500
 
 
-@app.route('/api/setDbPath',methods=["PATCH"])
+@app.route('/api/setDbPath', methods=["PATCH", "POST"])
 def setDbPath():
     global db_instance
-    data = request.json
+    data = request.json or {}
 
-    inputPath = data.get('db_Path')
+    inputPath = data.get('db_Path') or data.get('db_path')
+    create_new = data.get('create_new', False)
+    
     if not inputPath:
         return jsonify({"message": "Error: db_Path key missing in request"}), 400
     db_path = Path(inputPath)
 
     try:
-        new_instance = database(db_path)
+        if create_new:
+            new_instance = database.create_new_database(db_path)
+        else:
+            new_instance = database(db_path)
+            
         db_instance = new_instance
         setConfig(db_path)
+        return jsonify({"message": f"db path set to {db_instance.path}"}), 201
     except FileNotFoundError:
-        return jsonify({"message":"file not found"}),404
+        return jsonify({"message": "file not found", "suggest_create": True}), 404
     return jsonify({"message":f"db path set to {db_instance.path}"}),201
 
 @app.route('/api/getDbPath', methods=["GET"])
 def getDbPath():
-    return jsonify({"db_Path":str(db_instance.path)}),200
+    if db_instance:
+        return jsonify({"db_Path": str(db_instance.path)}), 200
+    return jsonify({"db_Path": ""}), 200
 
 @app.route('/api/getSkuGroups', methods=["GET"])
 def getSkuGroups():
@@ -324,6 +335,8 @@ def etsyManagerPage():
 
 @app.route('/api/etsy/config', methods=['GET', 'POST'])
 def etsyConfig():
+    if not db_instance:
+        return jsonify({'api_key': '', 'shared_secret': '', 'shop_id': '', 'has_access_token': False}), 200
     if request.method == 'GET':
         cfg = db_instance.get_all_etsy_config()
         return jsonify({

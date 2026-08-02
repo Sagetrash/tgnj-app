@@ -227,12 +227,21 @@ function scrollToEnd() {
 }
 
 async function getDbPath() {
-  response = await fetch("api/getDbPath", {
-    method: "GET",
-  });
-  data = await response.json();
-  db_field = document.getElementById("db_path");
-  db_field.innerText = data["db_Path"];
+  try {
+    const response = await fetch("/api/getDbPath", { method: "GET" });
+    if (!response.ok) return;
+    const data = await response.json();
+    const db_field = document.getElementById("db_path");
+    if (db_field) {
+      if ('value' in db_field) {
+        db_field.value = data["db_Path"] || "";
+      } else {
+        db_field.innerText = data["db_Path"] || "";
+      }
+    }
+  } catch (e) {
+    console.log("getDbPath notice:", e);
+  }
 }
 
 async function setDbPath() {
@@ -431,8 +440,10 @@ async function syncNow() {
 
 function setSyncStatus(state, text) {
   const el = document.getElementById('sync-status');
-  el.textContent = text;
-  el.className = 'sync-status sync-status--' + state;
+  if (el) {
+    el.textContent = text;
+    el.className = 'sync-status sync-status--' + state;
+  }
 }
 
 let lastSeenPullTime = null;
@@ -554,14 +565,45 @@ async function loadDbPathUI() {
 }
 
 async function saveDbPathUI() {
-  const db_path = document.getElementById('db_path_input').value.trim();
+  const db_path_input = document.getElementById('db_path_input');
+  if (!db_path_input) return;
+  const db_path = db_path_input.value.trim();
+  if (!db_path) {
+    alert('Please enter a valid database file path.');
+    return;
+  }
+  
   try {
-    await fetch('/api/setDbPath', {
+    let res = await fetch('/api/setDbPath', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ db_path: db_path, db_Path: db_path })
+      body: JSON.stringify({ db_path: db_path, db_Path: db_path, create_new: false })
     });
-    alert('Database path updated!');
+    
+    if (res.status === 404) {
+      if (confirm(`Database file does not exist at:\n${db_path}\n\nWould you like to create a new database file at this location?`)) {
+        res = await fetch('/api/setDbPath', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ db_path: db_path, db_Path: db_path, create_new: true })
+        });
+        if (res.ok) {
+          alert('New database created and connected successfully!');
+          window.location.reload();
+          return;
+        }
+      } else {
+        return;
+      }
+    }
+    
+    if (res.ok) {
+      alert('Database path connected successfully!');
+      window.location.reload();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert('Error connecting database: ' + (data.message || 'Unknown error'));
+    }
   } catch (e) {
     alert('Failed to update DB path: ' + e);
   }
