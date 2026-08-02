@@ -14,13 +14,13 @@
   <body>
     <header>
       <div class="header-brand">
-        <h1>💎 TGNJ Inventory Hub</h1>
+        <h1>TGNJ Inventory Hub</h1>
       </div>
       
       <div class="header-actions">
-        <button type="button" class="hdr-btn etsy-hdr-btn" onclick="window.location.href='/etsy'">🧡 Etsy Operations</button>
-        <button type="button" class="hdr-btn" onclick="syncNow()">☁ Turso Sync</button>
-        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">⚙️ Settings</button>
+        <button type="button" class="hdr-btn etsy-hdr-btn" onclick="window.location.href='/etsy'">Etsy Operations</button>
+        <button type="button" class="hdr-btn" onclick="syncNow()">Turso Sync</button>
+        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">Settings</button>
       </div>
     </header>
     <div class="window">
@@ -95,8 +95,8 @@
               />
             </div>
             <div class="form-btn-row">
-              <button type="button" onclick="handleFormSubmit()" class="btn form-submit-btn">➕ Add Item</button>
-              <button type="button" onclick="makePrintPdf()" class="btn form-print-btn">📄 Print PDF</button>
+              <button type="button" onclick="handleFormSubmit()" class="btn form-submit-btn">Add Item</button>
+              <button type="button" onclick="makePrintPdf()" class="btn form-print-btn">Print PDF</button>
             </div>
           </form>
         </div>
@@ -104,8 +104,8 @@
       <!--  -->
       <div class="table-window">
         <div class="table-toolbar" style="display:flex; justify:space-between; align-items:center; padding:8px 14px; background:#16355e; border-bottom:1px solid rgba(255,255,255,0.2);">
-          <span id="table-title" style="font-weight:700; font-size:0.9rem; color:#fab95b;">📋 Inventory Table</span>
-          <button type="button" class="hdr-btn" onclick="refreshMainTableUI()" id="refresh-tbl-btn" style="padding:4px 10px; font-size:0.78rem;">🔄 Refresh Table</button>
+          <span id="table-title" style="font-weight:700; font-size:0.9rem; color:#fab95b;">Inventory Table</span>
+          <button type="button" class="hdr-btn" onclick="refreshMainTableUI()" id="refresh-tbl-btn" style="padding:4px 10px; font-size:0.78rem;">Refresh Table</button>
         </div>
         <div class="table-container">
           <table id="display-table">
@@ -129,14 +129,14 @@
     <div id="settings-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
       <div class="modal-card">
         <div class="modal-header">
-          <h2>⚙️ Configuration & Secrets</h2>
+          <h2>Configuration & Secrets</h2>
           <button class="modal-close-btn" onclick="closeSettingsModal()">&times;</button>
         </div>
         
         <div class="modal-body">
           <!-- Etsy Section -->
           <div class="config-section">
-            <h3>🧡 TakshGems Etsy Integration</h3>
+            <h3>TakshGems Etsy Integration</h3>
             <p class="section-desc">Manage Etsy OpenAPI v3 Keystring & Credentials.</p>
             <div class="field-group">
               <label for="etsy_key">Etsy API Keystring (Client ID)</label>
@@ -160,7 +160,7 @@
 
           <!-- Turso Sync Section -->
           <div class="config-section">
-            <h3>☁ Turso Cloud Sync</h3>
+            <h3>Turso Cloud Sync</h3>
             <p class="section-desc">Configure Turso SQLite cloud database sync.</p>
             <div class="field-group">
               <label for="turso_url">Turso DB URL</label>

@@ -186,11 +186,11 @@ async function checkS3PhotosBatch(items) {
         const cell = document.getElementById(`photo-status-${sku}`);
         if (!cell) continue;
         if (status.a && status.b) {
-          cell.textContent = '📷📷';
+          cell.innerHTML = '<span class="badge badge-listed" style="font-size:0.75rem;">2/2 Available</span>';
         } else if (status.a) {
-          cell.textContent = '📷⚠️';
+          cell.innerHTML = '<span class="badge badge-unlisted" style="font-size:0.75rem;">1/2 Partial</span>';
         } else {
-          cell.textContent = '⚠️⚠️';
+          cell.innerHTML = '<span class="badge badge-sold" style="font-size:0.75rem;">0/2 Missing</span>';
         }
       }
     }
@@ -262,11 +262,11 @@ async function runBulkPublisher() {
         if (data.results) {
             data.results.forEach(result => {
                if (result.status === 'success') {
-                   appendLog(`✅ ${result.sku} → Draft #${result.listing_id} created`, 'success');
+                   appendLog(`[SUCCESS] ${result.sku} -> Draft #${result.listing_id} created`, 'success');
                } else if (result.status === 'skipped') {
-                   appendLog(`ℹ️ ${result.sku} → Already listed on Etsy (Draft #${result.listing_id || 'exist'})`, 'info');
+                   appendLog(`[INFO] ${result.sku} -> Already listed on Etsy (Draft #${result.listing_id || 'exist'})`, 'info');
                } else {
-                   appendLog(`❌ ${result.sku} → ${result.error || 'Unknown error'}`, 'error');
+                   appendLog(`[ERROR] ${result.sku} -> ${result.error || 'Unknown error'}`, 'error');
                }
             });
         }

@@ -82,15 +82,15 @@ async function renderTable(data) {
     if (item.status === 'SOLD') {
       const soldPrice = item.sold_price ? `$${Number(item.sold_price).toFixed(2)}` : '';
       const channel = item.sold_channel ? `(${item.sold_channel})` : '';
-      etsyStatusHtml = `<span class="badge badge-sold">🔴 Sold ${soldPrice} ${channel}</span>`;
-      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem;" title="Restore to Stock" onclick="restoreItemUI('${item.sku_group}',${item.sku_id})">↩️ Restore</button>`;
+      etsyStatusHtml = `<span class="badge badge-sold">Sold ${soldPrice} ${channel}</span>`;
+      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem;" title="Restore to Stock" onclick="restoreItemUI('${item.sku_group}',${item.sku_id})">Restore</button>`;
     } else if (item.etsy_listing_id || item.status === 'LISTED_ETSY') {
       const listingId = item.etsy_listing_id || '';
       const etsyLink = listingId ? `https://www.etsy.com/listing/${listingId}` : 'https://www.etsy.com/your/shops/me/tools/listings';
-      etsyStatusHtml = `<a href="${etsyLink}" target="_blank" class="badge badge-listed" style="text-decoration:none;" onclick="event.stopPropagation();">🧡 Listed #${listingId} ↗</a>`;
-      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem; border-color:#e74c3c; color:#e74c3c;" title="Mark as Sold" onclick="markSoldUI('${item.sku_group}',${item.sku_id})">🏷️ Sold</button> ${actionBtnHtml}`;
+      etsyStatusHtml = `<a href="${etsyLink}" target="_blank" class="badge badge-listed" style="text-decoration:none;" onclick="event.stopPropagation();">Listed #${listingId} ↗</a>`;
+      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem; border-color:#e74c3c; color:#e74c3c;" title="Mark as Sold" onclick="markSoldUI('${item.sku_group}',${item.sku_id})">Mark Sold</button> ${actionBtnHtml}`;
     } else {
-      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem; border-color:#e74c3c; color:#e74c3c;" title="Mark as Sold" onclick="markSoldUI('${item.sku_group}',${item.sku_id})">🏷️ Sold</button> ${actionBtnHtml}`;
+      actionBtnHtml = `<button class="hdr-btn" style="padding:2px 8px; font-size:0.75rem; border-color:#e74c3c; color:#e74c3c;" title="Mark as Sold" onclick="markSoldUI('${item.sku_group}',${item.sku_id})">Mark Sold</button> ${actionBtnHtml}`;
     }
 
     row.innerHTML = `

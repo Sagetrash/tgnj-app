@@ -14,12 +14,12 @@
   <body>
     <header>
       <div class="header-brand">
-        <h1>🧡 TakshGems Etsy Operations Hub</h1>
+        <h1>TakshGems Etsy Operations Hub</h1>
       </div>
       
       <div class="header-actions">
-        <button type="button" class="hdr-btn" onclick="window.location.href='/'">⬅ Back to Inventory</button>
-        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">⚙️ Settings</button>
+        <button type="button" class="hdr-btn" onclick="window.location.href='/'">Back to Inventory</button>
+        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">Settings</button>
       </div>
     </header>
 
@@ -27,7 +27,7 @@
       <!-- Top Overview Row -->
       <div class="etsy-card shop-status-card">
         <div class="card-header">
-          <h2>🏬 TakshGems Shop Status</h2>
+          <h2>TakshGems Shop Status</h2>
           <span id="shop-conn-badge" class="badge badge-listed">Connected (ID: 24364290)</span>
         </div>
         <div class="card-body status-body-grid">
@@ -45,15 +45,15 @@
           </div>
         </div>
         <div class="card-actions">
-          <button class="btn btn-add" onclick="syncEtsyOrdersHub()">⚡ Sync Etsy Sales Receipts</button>
-          <button class="hdr-btn" onclick="reauthEtsyHub()">🔑 Re-Authenticate OAuth PKCE</button>
+          <button class="btn btn-add" onclick="syncEtsyOrdersHub()">Sync Etsy Sales Receipts</button>
+          <button class="hdr-btn" onclick="reauthEtsyHub()">Re-Authenticate OAuth PKCE</button>
         </div>
       </div>
 
       <!-- Bulk Publisher Section -->
       <div class="etsy-card bulk-publisher-card">
         <div class="card-header">
-          <h2>🚀 Bulk Draft Publisher & S3 Photo Uploader</h2>
+          <h2>Bulk Draft Publisher & S3 Photo Uploader</h2>
         </div>
         <div class="card-body">
           <p class="section-desc">Select a SKU group, enter gemstone details, preview your listings, then push drafts to Etsy with auto-uploaded S3 photos.</p>
@@ -83,13 +83,13 @@
           <!-- Step 2: Preview Table -->
           <div id="bulk-preview-section" style="display:none; margin-top: 1.2rem;">
             <div class="bulk-preview-header">
-              <h3 id="bulk-preview-title">📋 Preview: 0 stones loaded</h3>
+              <h3 id="bulk-preview-title">Preview: 0 stones loaded</h3>
               <div class="bulk-select-controls">
                 <label style="font-size:0.85rem; display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer; margin-right:0.8rem;">
                   <input type="checkbox" id="bulk-show-listed-cb" onchange="loadBulkPreview()" /> Show Already Listed
                 </label>
-                <button class="hdr-btn" onclick="toggleSelectAll(true)">☑ Select All</button>
-                <button class="hdr-btn" onclick="toggleSelectAll(false)">☐ Deselect All</button>
+                <button class="hdr-btn" onclick="toggleSelectAll(true)">Select All</button>
+                <button class="hdr-btn" onclick="toggleSelectAll(false)">Deselect All</button>
                 <span id="bulk-selected-count" class="badge badge-listed">0 selected</span>
               </div>
             </div>
@@ -102,7 +102,7 @@
                     <th>Weight</th>
                     <th>Shape</th>
                     <th>Dims (mm)</th>
-                    <th>📷 Photos</th>
+                    <th>Photos</th>
                     <th>Title Preview</th>
                   </tr>
                 </thead>
@@ -115,7 +115,7 @@
 
           <!-- Step 3: Push Button & Progress -->
           <div class="bulk-action-bar" style="margin-top: 1rem;">
-            <button id="bulk-push-btn" class="btn btn-add" onclick="runBulkPublisher()" disabled>🚀 Push Selected Drafts to Etsy</button>
+            <button id="bulk-push-btn" class="btn btn-add" onclick="runBulkPublisher()" disabled>Push Selected Drafts to Etsy</button>
           </div>
           <div id="bulk-progress-container" class="progress-container" style="display:none;">
             <div id="bulk-progress-bar" class="progress-bar"></div>
@@ -130,8 +130,8 @@
       <!-- Recent Orders / Sales Receipts Table -->
       <div class="etsy-card orders-log-card">
         <div class="card-header">
-          <h2>📦 Recent Etsy Sales & Order Sync Log</h2>
-          <button class="hdr-btn" onclick="fetchRecentOrdersLog()">🔄 Refresh Orders</button>
+          <h2>Recent Etsy Sales & Order Sync Log</h2>
+          <button class="hdr-btn" onclick="fetchRecentOrdersLog()">Refresh Orders</button>
         </div>
         <div class="card-body table-container">
           <table class="etsy-orders-table">
