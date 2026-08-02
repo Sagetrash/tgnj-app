@@ -801,7 +801,7 @@ def bulkPush():
                     results.append({"sku": sku_key, "error": str(e), "status": "failed"})
                     pushed_ok = True
             
-        time.sleep(0.5)
+        time.sleep(0.22)
 
     return jsonify({
         "total": total,
