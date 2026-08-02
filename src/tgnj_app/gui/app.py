@@ -463,7 +463,14 @@ def etsySyncOrders():
         if synced_count > 0:
             trigger_async_sync()
 
-        return jsonify({'message': f'Synced Etsy sales! Updated {synced_count} sold items in local inventory.'}), 200
+        # Engine 3: Clean up local items whose drafts/listings were deleted on Etsy.com
+        deleted_reset_count = sync_deleted_etsy_drafts(client, access_token)
+
+        msg = f'Synced Etsy sales! Updated {synced_count} sold items.'
+        if deleted_reset_count > 0:
+            msg += f' Reset {deleted_reset_count} items whose drafts were deleted on Etsy.com.'
+
+        return jsonify({'message': msg}), 200
     except Exception as e:
         print(f"[app] etsySyncOrders exception: {e}")
         return jsonify(message(f'Etsy Sync Orders Exception: {e}')), 500
@@ -540,37 +547,77 @@ def pushListing(sku_group: str, sku_id: int):
     except Exception as e:
         return jsonify(message(f'Etsy Push Exception: {e}')), 500
 
+def sync_deleted_etsy_drafts(client, access_token):
+    """
+    Cross-checks local database listings against live Etsy active & draft listings.
+    If a draft/listing was deleted from Etsy.com, resets local item back to IN_STOCK.
+    """
+    reset_count = 0
+    try:
+        active_resp = client.get_shop_listings_by_state(access_token, state='active', limit=100)
+        draft_resp = client.get_shop_listings_by_state(access_token, state='draft', limit=100)
+        inactive_resp = client.get_shop_listings_by_state(access_token, state='inactive', limit=100)
+
+        live_ids = set()
+        for resp in [active_resp, draft_resp, inactive_resp]:
+            for lst in resp.get('results', []):
+                if lst.get('listing_id'):
+                    live_ids.add(str(lst.get('listing_id')))
+
+        with db_instance.conn as conn:
+            curs = conn.cursor()
+            curs.execute("SELECT sku_group, sku_id, etsy_listing_id FROM inventory WHERE is_deleted = 0 AND etsy_listing_id IS NOT NULL AND etsy_listing_id != '' AND (status IS NULL OR status = 'LISTED_ETSY');")
+            rows = curs.fetchall()
+            
+            for row in rows:
+                loc_id = str(row['etsy_listing_id'])
+                if loc_id not in live_ids:
+                    curs.execute("UPDATE inventory SET status = 'IN_STOCK', etsy_listing_id = NULL WHERE sku_group = ? AND sku_id = ?;", (row['sku_group'], row['sku_id']))
+                    reset_count += curs.rowcount
+
+            if reset_count > 0:
+                conn.commit()
+                trigger_async_sync()
+                print(f"[sync] Reset {reset_count} local items whose Etsy drafts/listings were deleted on Etsy.com!")
+    except Exception as e:
+        print(f"[sync] sync_deleted_etsy_drafts error: {e}")
+    return reset_count
+
 @app.route('/api/etsy/liveStats', methods=['GET'])
 def etsyLiveStats():
     try:
         from tgnj_app.core.etsy_client import EtsyClient
-        api_key = db_instance.get_etsy_config('api_key')
-        shared_secret = db_instance.get_etsy_config('shared_secret')
-        shop_id = db_instance.get_etsy_config('shop_id')
-        access_token = db_instance.get_etsy_config('access_token')
+        api_key, shared_secret, shop_id, access_token, refresh_token = get_fresh_etsy_tokens()
 
         if not api_key or not access_token or not shop_id:
             return jsonify({
                 'connected': False,
                 'active': 0,
-                'draft': 0
+                'draft': 0,
+                'reset_drafts': 0
             }), 200
 
         client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+        
+        # Cross-check and reset deleted drafts
+        reset_count = sync_deleted_etsy_drafts(client, access_token)
+
         active_resp = client.get_shop_listings_by_state(access_token, state='active')
         draft_resp = client.get_shop_listings_by_state(access_token, state='draft')
         
         return jsonify({
             'connected': True,
             'active': active_resp.get('count', len(active_resp.get('results', []))),
-            'draft': draft_resp.get('count', len(draft_resp.get('results', [])))
+            'draft': draft_resp.get('count', len(draft_resp.get('results', []))),
+            'reset_drafts': reset_count
         }), 200
     except Exception as e:
         print(f"[app] etsyLiveStats exception: {e}")
         return jsonify({
             'connected': False,
             'active': 0,
-            'draft': 0
+            'draft': 0,
+            'reset_drafts': 0
         }), 200
 
 @app.route('/api/etsy/checkPhotos', methods=['POST'])
