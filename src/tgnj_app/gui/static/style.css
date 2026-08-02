@@ -93,7 +93,17 @@ input:focus {
 }
 
 .deleteCol {
-  width: 7%;
+  min-width: 125px;
+  width: 125px;
+  white-space: nowrap;
+}
+
+td.deleteCol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 6px !important;
 }
 
 th {
