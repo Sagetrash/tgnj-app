@@ -26,6 +26,26 @@ class database:
                 self.conn.execute("ALTER TABLE inventory ADD COLUMN is_deleted INTEGER DEFAULT 0")
             except sql.OperationalError:
                 pass
+            try:
+                self.conn.execute("ALTER TABLE inventory ADD COLUMN status TEXT DEFAULT 'IN_STOCK'")
+            except sql.OperationalError:
+                pass
+            try:
+                self.conn.execute("ALTER TABLE inventory ADD COLUMN etsy_listing_id TEXT DEFAULT ''")
+            except sql.OperationalError:
+                pass
+            try:
+                self.conn.execute("ALTER TABLE inventory ADD COLUMN sold_price REAL DEFAULT 0.0")
+            except sql.OperationalError:
+                pass
+            try:
+                self.conn.execute("ALTER TABLE inventory ADD COLUMN sold_channel TEXT DEFAULT ''")
+            except sql.OperationalError:
+                pass
+            try:
+                self.conn.execute("ALTER TABLE inventory ADD COLUMN sold_at TEXT DEFAULT ''")
+            except sql.OperationalError:
+                pass
             
             self.conn.execute("CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);")
             self.conn.execute("CREATE TABLE IF NOT EXISTS _etsy_config (key TEXT PRIMARY KEY, value TEXT);")
