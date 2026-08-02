@@ -80,7 +80,7 @@ async function loadBulkPreview() {
     itemsToPublish.forEach(item => {
       const formattedId = String(item.sku_id).padStart(3, "0");
       const weight = item.weight || '';
-      const shape = item.shape || '';
+      const shape = capitalizeShape(item.shape || '');
       const l = item.length || 0;
       const w = item.width || 0;
       const d = item.depth || 0;
@@ -126,6 +126,11 @@ async function loadBulkPreview() {
   }
 }
 
+function capitalizeShape(str) {
+  if (!str) return '';
+  return str.trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
 function updateTitlePreviews() {
   const gemNameInput = document.getElementById('bulk_gemstone_name');
   const gemName = gemNameInput ? gemNameInput.value.trim() : '';
@@ -133,7 +138,7 @@ function updateTitlePreviews() {
 
   rows.forEach(row => {
     const weight = row.getAttribute('data-weight');
-    const shape = row.getAttribute('data-shape');
+    const shape = capitalizeShape(row.getAttribute('data-shape'));
     const titleCell = row.querySelector('.title-preview');
     if (titleCell) {
       if (gemName) {

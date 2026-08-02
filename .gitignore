@@ -12,3 +12,4 @@ wheels/
 *.db*
 .tgnj-app-bruno
 config.json
+last error logs.txt
