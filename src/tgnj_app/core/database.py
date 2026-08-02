@@ -226,14 +226,16 @@ class database:
         update_query = """
             UPDATE inventory SET
                 shape = ?, weight = ?, length = ?, width = ?, depth = ?,
-                created_at = ?, updated_at = ?, is_deleted = ?
+                created_at = ?, updated_at = ?, is_deleted = ?,
+                status = ?, etsy_listing_id = ?, sold_price = ?, sold_channel = ?, sold_at = ?
             WHERE id = ?;
         """
         insert_query = """
             INSERT INTO inventory
                 (sku_group, sku_id, shape, weight, length, width, depth,
-                 created_at, updated_at, is_deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                 created_at, updated_at, is_deleted,
+                 status, etsy_listing_id, sold_price, sold_channel, sold_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         with self.conn as conn:
             try:
@@ -247,6 +249,12 @@ class database:
                     curs.execute(check_query, (sku_group, sku_id))
                     existing = curs.fetchone()
 
+                    status_val = row.get('status', 'IN_STOCK')
+                    listing_id_val = row.get('etsy_listing_id', '')
+                    sold_price_val = float(row.get('sold_price') or 0.0)
+                    sold_channel_val = row.get('sold_channel', '')
+                    sold_at_val = row.get('sold_at', '')
+
                     if existing:
                         # Skip if local timestamp is strictly newer
                         if existing['updated_at'] and existing['updated_at'] > (row.get('updated_at') or ''):
@@ -256,13 +264,15 @@ class database:
                             row.get('shape'), row.get('weight'), row.get('length'),
                             row.get('width'), row.get('depth'), row.get('created_at'),
                             row.get('updated_at'), row.get('is_deleted', 0),
+                            status_val, listing_id_val, sold_price_val, sold_channel_val, sold_at_val,
                             existing['id']
                         ))
                     else:
                         curs.execute(insert_query, (
                             sku_group, sku_id, row.get('shape'), row.get('weight'),
                             row.get('length'), row.get('width'), row.get('depth'),
-                            row.get('created_at'), row.get('updated_at'), row.get('is_deleted', 0)
+                            row.get('created_at'), row.get('updated_at'), row.get('is_deleted', 0),
+                            status_val, listing_id_val, sold_price_val, sold_channel_val, sold_at_val
                         ))
             except sql.Error as e:
                 print(f"[database] apply_remote_changes error: {e}")

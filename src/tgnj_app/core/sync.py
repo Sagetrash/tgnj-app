@@ -41,14 +41,18 @@ def _batch_push_rows(turso: 'TursoClient', rows: list[dict]) -> int:
                 "sql": """
                 INSERT OR REPLACE INTO inventory
                     (id, sku_group, sku_id, shape, weight, length, width, depth,
-                     created_at, updated_at, is_deleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                     created_at, updated_at, is_deleted,
+                     status, etsy_listing_id, sold_price, sold_channel, sold_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 "args": [
                     row.get('id'), row.get('sku_group'), row.get('sku_id'),
                     row.get('shape'), row.get('weight'), row.get('length'),
                     row.get('width'), row.get('depth'), row.get('created_at'),
-                    row.get('updated_at'), row.get('is_deleted', 0)
+                    row.get('updated_at'), row.get('is_deleted', 0),
+                    row.get('status', 'IN_STOCK'), row.get('etsy_listing_id', ''),
+                    row.get('sold_price', 0.0), row.get('sold_channel', ''),
+                    row.get('sold_at', '')
                 ]
             })
 
