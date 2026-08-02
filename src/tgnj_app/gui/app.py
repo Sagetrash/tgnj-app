@@ -940,20 +940,44 @@ def bulkPush():
             except Exception as e:
                 err_msg = str(e).lower()
                 is_auth_error = ("401" in err_msg or "expired" in err_msg or "unauthorized" in err_msg or "invalid_token" in err_msg)
+                is_rate_limit = ("429" in err_msg or "too many requests" in err_msg)
                 if is_auth_error and attempt < max_retries:
-                        continue # Retry immediately with new token
+                    refresh_etsy_token_if_needed(client, db_instance.get_etsy_config('refresh_token'))
+                    continue
                 elif is_rate_limit and attempt < max_retries:
-                    print(f"[bulkPush] Rate limit hit (429) on item {sku_key}. Sleeping 5 seconds before retry...")
-                    time.sleep(5.0)
-                    continue # Retry after backoff
+                    time.sleep(3.0)
+                    continue
                 
-                # If retries exhausted or unhandled error
-                if attempt >= max_retries or (not is_auth_error and not is_rate_limit):
-                    failed += 1
-                    results.append({"sku": sku_key, "error": str(e), "status": "failed"})
-                    pushed_ok = True
-            
-        time.sleep(0.05)
+                if attempt >= max_retries:
+                    return {"sku": sku_key, "error": str(e), "status": "failed", "is_success": False}
+
+        return {"sku": sku_key, "error": "Max retries reached", "status": "failed", "is_success": False}
+
+    from concurrent.futures import ThreadPoolExecutor
+    num_workers = min(2, len(items)) if len(items) > 1 else 1
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        item_results = list(executor.map(process_single_item, items))
+
+    for res in item_results:
+        if not res:
+            continue
+        if res.get("is_success"):
+            success += 1
+            if "t_draft" in res: draft_times.append(res["t_draft"])
+            if "t_inv" in res: inv_times.append(res["t_inv"])
+            if "t_photos" in res: photo_times.append(res["t_photos"])
+            results.append({
+                "sku": res["sku"],
+                "listing_id": res["listing_id"],
+                "status": "success",
+                "duration_sec": res["duration_sec"]
+            })
+        else:
+            if res.get("status") == "skipped":
+                results.append({"sku": res["sku"], "listing_id": res.get("listing_id"), "error": res.get("error"), "status": "skipped"})
+            else:
+                failed += 1
+                results.append({"sku": res["sku"], "error": res.get("error"), "status": "failed"})
 
     total_batch_duration = time.perf_counter() - batch_start_time
     avg_per_item = (total_batch_duration / success) if success > 0 else 0
