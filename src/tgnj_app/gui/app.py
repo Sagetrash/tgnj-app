@@ -625,6 +625,7 @@ def sync_deleted_etsy_drafts(client, access_token):
                 if lst.get('listing_id'):
                     live_ids.add(str(lst.get('listing_id')))
 
+        from datetime import datetime, timezone
         with db_instance.conn as conn:
             curs = conn.cursor()
             curs.execute("SELECT sku_group, sku_id, etsy_listing_id FROM inventory WHERE is_deleted = 0 AND etsy_listing_id IS NOT NULL AND etsy_listing_id != '' AND (status IS NULL OR status = 'LISTED_ETSY');")
@@ -633,14 +634,27 @@ def sync_deleted_etsy_drafts(client, access_token):
             for row in rows:
                 loc_id = str(row['etsy_listing_id'])
                 if loc_id not in live_ids:
+                    now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                     curs.execute("""
                         UPDATE inventory 
                         SET status = 'IN_STOCK', 
                             etsy_listing_id = NULL, 
-                            updated_at = datetime('now') 
+                            updated_at = ? 
                         WHERE sku_group = ? AND sku_id = ?;
-                    """, (row['sku_group'], row['sku_id']))
+                    """, (now_str, row['sku_group'], row['sku_id']))
                     reset_count += curs.rowcount
+
+                    if turso_client is not None:
+                        try:
+                            turso_client.execute("""
+                                UPDATE inventory 
+                                SET status = 'IN_STOCK', 
+                                    etsy_listing_id = '', 
+                                    updated_at = ? 
+                                WHERE sku_group = ? AND sku_id = ?;
+                            """, [now_str, row['sku_group'], row['sku_id']])
+                        except Exception as te:
+                            print(f"[sync] Turso draft reset notice for {row['sku_group']}-{row['sku_id']}: {te}")
 
             if reset_count > 0:
                 conn.commit()
@@ -837,9 +851,23 @@ def bulkPush():
         if not item:
             return {"sku": sku_key, "error": "Item not found in database", "status": "failed", "is_success": False}
 
-        # Prevent duplicate listing creation if already listed on Etsy
+        # Prevent duplicate listing creation if already listed on Etsy (locally or on Turso)
         if item.get('etsy_listing_id') or item.get('status') == 'LISTED_ETSY':
             return {"sku": sku_key, "listing_id": item.get('etsy_listing_id'), "error": "Already listed on Etsy", "status": "skipped", "is_success": False}
+
+        if turso_client is not None:
+            try:
+                r_rows = turso_client.query_rows(
+                    "SELECT etsy_listing_id, status FROM inventory WHERE sku_group = ? AND sku_id = ?;",
+                    [sku_group, sku_id]
+                )
+                if r_rows and r_rows[0]:
+                    r_lid = r_rows[0].get('etsy_listing_id')
+                    r_status = r_rows[0].get('status')
+                    if r_lid or r_status == 'LISTED_ETSY':
+                        return {"sku": sku_key, "listing_id": r_lid, "error": "Already listed on Etsy (remote)", "status": "skipped", "is_success": False}
+            except Exception as te:
+                print(f"[bulkPush] Turso pre-check notice for {sku_key}: {te}")
             
         if gemstone_name:
             item['gemstone_name'] = gemstone_name
@@ -917,7 +945,10 @@ def bulkPush():
                 client.upload_s3_photos_for_listing(current_access, str(listing_id), sku_group, sku_id)
                 t_photos = time.perf_counter() - t2
 
-                # Update database status using thread-safe connection
+                from datetime import datetime, timezone
+                now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+                # Update local database status
                 conn_w = sql.connect(db_uri, uri=True)
                 try:
                     curs_w = conn_w.cursor()
@@ -925,12 +956,25 @@ def bulkPush():
                         UPDATE inventory 
                         SET status = 'LISTED_ETSY', 
                             etsy_listing_id = ?, 
-                            updated_at = datetime('now') 
+                            updated_at = ? 
                         WHERE sku_group = ? AND sku_id = ?;
-                    """, (str(listing_id), sku_group, sku_id))
+                    """, (str(listing_id), now_str, sku_group, sku_id))
                     conn_w.commit()
                 finally:
                     conn_w.close()
+
+                # Update Turso directly with synchronized timestamp
+                if turso_client is not None:
+                    try:
+                        turso_client.execute("""
+                            UPDATE inventory 
+                            SET status = 'LISTED_ETSY', 
+                                etsy_listing_id = ?, 
+                                updated_at = ? 
+                            WHERE sku_group = ? AND sku_id = ?;
+                        """, [str(listing_id), now_str, sku_group, sku_id])
+                    except Exception as te:
+                        print(f"[bulkPush] Turso direct update notice for {sku_key}: {te}")
                 
                 item_total_time = time.perf_counter() - item_start_time
                 print(f"[bulkPush] {sku_key} listed in {item_total_time:.2f}s (Draft: {t_draft:.2f}s | SKU: {t_inv:.2f}s | Photos: {t_photos:.2f}s)")

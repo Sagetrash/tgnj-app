@@ -229,7 +229,7 @@ class database:
         Upsert a batch of remote rows into local SQLite — matched by natural key (sku_group, sku_id).
         Only writes if remote updated_at >= local updated_at.
         """
-        check_query = "SELECT id, updated_at FROM inventory WHERE sku_group = ? AND sku_id = ?;"
+        check_query = "SELECT id, updated_at, etsy_listing_id, status FROM inventory WHERE sku_group = ? AND sku_id = ?;"
         update_query = """
             UPDATE inventory SET
                 shape = ?, weight = ?, length = ?, width = ?, depth = ?,
@@ -268,6 +268,15 @@ class database:
                         # Skip if local timestamp is strictly newer
                         if local_ts and remote_ts and local_ts > remote_ts:
                             continue
+
+                        # Guard: Protect valid local etsy_listing_id from being wiped by stale remote rows
+                        local_listing_id = (existing['etsy_listing_id'] or '')
+                        local_status = (existing['status'] or 'IN_STOCK')
+                        if local_listing_id and not listing_id_val:
+                            # Preserve listing ID if remote status is LISTED_ETSY or local was LISTED_ETSY (and not explicitly reset to IN_STOCK)
+                            if status_val == 'LISTED_ETSY' or (local_status == 'LISTED_ETSY' and status_val != 'IN_STOCK'):
+                                listing_id_val = local_listing_id
+                                status_val = local_status
 
                         curs.execute(update_query, (
                             row.get('shape'), row.get('weight'), row.get('length'),

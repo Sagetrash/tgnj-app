@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from datetime import datetime, timedelta, timezone
+
 if TYPE_CHECKING:
     from tgnj_app.core.database import database
     from tgnj_app.core.turso_client import TursoClient
@@ -28,6 +30,7 @@ def _utcnow() -> str:
 
 
 BATCH_SIZE = 250
+PULL_OVERLAP_SECONDS = 120  # Re-query lookback buffer to eliminate multi-device watermark races
 
 
 def _batch_push_rows(turso: 'TursoClient', rows: list[dict]) -> int:
@@ -97,9 +100,17 @@ def sync_pull(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> in
     Returns the number of rows pulled.
     """
     last_pull = (db.get_sync_meta('last_pull_time') or _EPOCH).replace('T', ' ').replace('Z', '').strip()
+    query_since = last_pull
+    if last_pull != _EPOCH:
+        try:
+            dt = datetime.strptime(last_pull, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+            query_since = (dt - timedelta(seconds=PULL_OVERLAP_SECONDS)).strftime('%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            query_since = last_pull
+
     remote_rows = turso.query_rows(
         "SELECT * FROM inventory WHERE updated_at >= ? ORDER BY updated_at ASC;",
-        [last_pull]
+        [query_since]
     )
 
     if remote_rows is None:
