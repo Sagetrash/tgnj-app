@@ -128,10 +128,9 @@ def sync_pull(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> in
             pulled += 1
             continue
         rows_to_apply.append(row)
-        pulled += 1
 
     if rows_to_apply:
-        db.apply_remote_changes(rows_to_apply)
+        pulled = db.apply_remote_changes(rows_to_apply)
 
     if not dry_run:
         db.set_sync_meta('last_pull_time', _utcnow())

@@ -224,12 +224,13 @@ class database:
                 if curs:
                     curs.close()
 
-    def apply_remote_changes(self, rows: list[dict]):
+    def apply_remote_changes(self, rows: list[dict]) -> int:
         """
         Upsert a batch of remote rows into local SQLite — matched by natural key (sku_group, sku_id).
-        Only writes if remote updated_at >= local updated_at.
+        Only writes if remote updated_at >= local updated_at and actual data has changed.
+        Returns the number of rows actually updated or inserted locally.
         """
-        check_query = "SELECT id, updated_at, etsy_listing_id, status FROM inventory WHERE sku_group = ? AND sku_id = ?;"
+        check_query = "SELECT * FROM inventory WHERE sku_group = ? AND sku_id = ?;"
         update_query = """
             UPDATE inventory SET
                 shape = ?, weight = ?, length = ?, width = ?, depth = ?,
@@ -244,6 +245,7 @@ class database:
                  status, etsy_listing_id, sold_price, sold_channel, sold_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
+        applied_count = 0
         with self.conn as conn:
             try:
                 curs = conn.cursor()
@@ -261,6 +263,14 @@ class database:
                     sold_price_val = float(row.get('sold_price') or 0.0)
                     sold_channel_val = row.get('sold_channel', '')
                     sold_at_val = row.get('sold_at', '')
+                    created_at_val = row.get('created_at', '')
+                    updated_at_val = row.get('updated_at', '')
+                    is_deleted_val = int(row.get('is_deleted') or 0)
+                    shape_val = row.get('shape')
+                    weight_val = row.get('weight')
+                    length_val = row.get('length')
+                    width_val = row.get('width')
+                    depth_val = row.get('depth')
 
                     if existing:
                         local_ts = (existing['updated_at'] or '').replace('T', ' ').replace('Z', '').strip()
@@ -278,25 +288,43 @@ class database:
                                 listing_id_val = local_listing_id
                                 status_val = local_status
 
+                        # Check if any field actually changed compared to local existing record
+                        if (str(existing['shape'] or '') == str(shape_val or '') and
+                            float(existing['weight'] or 0.0) == float(weight_val or 0.0) and
+                            str(existing['length'] or '') == str(length_val or '') and
+                            str(existing['width'] or '') == str(width_val or '') and
+                            str(existing['depth'] or '') == str(depth_val or '') and
+                            int(existing['is_deleted'] or 0) == is_deleted_val and
+                            str(existing['status'] or '') == str(status_val or '') and
+                            str(existing['etsy_listing_id'] or '') == str(listing_id_val or '') and
+                            float(existing['sold_price'] or 0.0) == sold_price_val and
+                            str(existing['sold_channel'] or '') == str(sold_channel_val or '') and
+                            str(existing['sold_at'] or '') == str(sold_at_val or '')):
+                            # No actual data change — skip redundant SQL update
+                            continue
+
                         curs.execute(update_query, (
-                            row.get('shape'), row.get('weight'), row.get('length'),
-                            row.get('width'), row.get('depth'), row.get('created_at'),
-                            row.get('updated_at'), row.get('is_deleted', 0),
+                            shape_val, weight_val, length_val,
+                            width_val, depth_val, created_at_val,
+                            updated_at_val, is_deleted_val,
                             status_val, listing_id_val, sold_price_val, sold_channel_val, sold_at_val,
                             existing['id']
                         ))
+                        applied_count += 1
                     else:
                         curs.execute(insert_query, (
-                            sku_group, sku_id, row.get('shape'), row.get('weight'),
-                            row.get('length'), row.get('width'), row.get('depth'),
-                            row.get('created_at'), row.get('updated_at'), row.get('is_deleted', 0),
+                            sku_group, sku_id, shape_val, weight_val,
+                            length_val, width_val, depth_val,
+                            created_at_val, updated_at_val, is_deleted_val,
                             status_val, listing_id_val, sold_price_val, sold_channel_val, sold_at_val
                         ))
+                        applied_count += 1
             except sql.Error as e:
                 print(f"[database] apply_remote_changes error: {e}")
             finally:
                 if curs:
                     curs.close()
+        return applied_count
 
 
     def get_sync_meta(self, key: str) -> str | None:
