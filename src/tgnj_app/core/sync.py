@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from tgnj_app.core.database import database
     from tgnj_app.core.turso_client import TursoClient
 
-_EPOCH = '1970-01-01T00:00:00'
+_EPOCH = '1970-01-01 00:00:00'
 
 
 def _utcnow() -> str:
@@ -96,7 +96,7 @@ def sync_pull(db: 'database', turso: 'TursoClient', dry_run: bool = False) -> in
     Pull remote changes from Turso and apply to local SQLite.
     Returns the number of rows pulled.
     """
-    last_pull = db.get_sync_meta('last_pull_time') or _EPOCH
+    last_pull = (db.get_sync_meta('last_pull_time') or _EPOCH).replace('T', ' ').replace('Z', '').strip()
     remote_rows = turso.query_rows(
         "SELECT * FROM inventory WHERE updated_at >= ? ORDER BY updated_at ASC;",
         [last_pull]

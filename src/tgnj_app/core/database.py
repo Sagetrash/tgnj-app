@@ -263,8 +263,10 @@ class database:
                     sold_at_val = row.get('sold_at', '')
 
                     if existing:
+                        local_ts = (existing['updated_at'] or '').replace('T', ' ').replace('Z', '').strip()
+                        remote_ts = (row.get('updated_at') or '').replace('T', ' ').replace('Z', '').strip()
                         # Skip if local timestamp is strictly newer
-                        if existing['updated_at'] and existing['updated_at'] > (row.get('updated_at') or ''):
+                        if local_ts and remote_ts and local_ts > remote_ts:
                             continue
 
                         curs.execute(update_query, (
