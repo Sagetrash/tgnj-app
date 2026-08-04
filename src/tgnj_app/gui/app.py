@@ -116,6 +116,7 @@ _turso_url, _turso_token, _sync_interval = load_turso_config()
 if _turso_url and _turso_token:
     turso_client = TursoClient(_turso_url, _turso_token)
     start_sync_loop(_sync_interval)
+    sync_engine.start_outbox_flusher(db_instance, turso_client)
     print(f"[sync] Auto-sync enabled (interval={_sync_interval}s)")
 
 # ________________________ ROUTES ______________________
@@ -130,16 +131,18 @@ def getData(sku_group:str):
     return jsonify(cleanData),201
 
 def trigger_async_sync():
-    """Trigger a non-blocking background sync cycle when data is added/edited/deleted."""
+    """Trigger a non-blocking background sync cycle when data is added/edited/deleted.
+    Kept for pull-only syncs (e.g. after Etsy token config). Writes now use outbox.
+    """
     def _async():
         if turso_client is not None and db_instance is not None:
             try:
                 with sync_lock:
-                    result = sync_engine.sync(db_instance, turso_client)
-                print(f"[sync] Action-sync: pushed={result.get('pushed', 0)} pulled={result.get('pulled', 0)}")
+                    result = sync_engine.sync_pull(db_instance, turso_client)
+                print(f"[sync] Pull-sync: pulled={result}")
             except Exception as e:
-                print(f"[sync] Action-sync error: {e}")
-    threading.Thread(target=_async, daemon=True, name='action-sync').start()
+                print(f"[sync] Pull-sync error: {e}")
+    threading.Thread(target=_async, daemon=True, name='pull-sync').start()
 
 
 @app.route('/api/addItem',methods=['POST'])
@@ -154,19 +157,24 @@ def addItem():
     width = data.get('width')
     depth = data.get('depth')
 
-    success = db_instance.add_item(sku_group=sku_group,sku_id=sku_id,shape=shape,weight=weight,length=length,width=width,depth=depth)
+    success = db_instance.add_item(sku_group=sku_group, sku_id=sku_id, shape=shape, weight=weight, length=length, width=width, depth=depth)
 
     if success:
-        trigger_async_sync()
-        return jsonify({'message':"stone added successfully"}),201
+        from datetime import datetime, timezone
+        db_instance.enqueue_mutation(sku_group, sku_id, 'ADD_ITEM', {
+            'shape': shape, 'weight': weight, 'length': length,
+            'width': width, 'depth': depth,
+            'created_at': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        })
+        return jsonify({'message': "stone added successfully"}), 201
     else:
-        return jsonify({"message":"error"}), 500
+        return jsonify({"message": "error"}), 500
 
 @app.route('/api/deleteItem/<sku_group>/<int:sku_id>',methods=["DELETE"])
 def deleteItem(sku_group:str,sku_id:int):
     success = db_instance.delete_item(sku_group=sku_group,sku_id=sku_id)
     if success:
-        trigger_async_sync()
+        db_instance.enqueue_mutation(sku_group, sku_id, 'DELETE_ITEM', {})
         return jsonify(message("deleted item successfully")), 201
     else:
         return jsonify(message("Error deleting item")), 500
@@ -174,12 +182,13 @@ def deleteItem(sku_group:str,sku_id:int):
 @app.route('/api/editItem/<group>/<int:id>',methods=["PATCH"])
 def editItems(group,id):
     data = request.json
-    success = db_instance.edit_item(sku_group=group,sku_id=id, **data)
+    success = db_instance.edit_item(sku_group=group, sku_id=id, **data)
     if success:
-        trigger_async_sync()
+        # Only enqueue fields that are valid inventory dimensions (ALLOWED_EDIT_FIELDS guard is in OutboxFlusher)
+        db_instance.enqueue_mutation(group, id, 'UPDATE_FIELDS', data)
         return jsonify(message("updated item successfully")), 201
     else:
-        return jsonify(message("failute updating items")), 500
+        return jsonify(message("failure updating items")), 500
 
 
 @app.route('/api/setDbPath', methods=["PATCH", "POST"])
@@ -434,6 +443,8 @@ def etsySyncOrders():
         
         with db_instance.conn as conn:
             curs = conn.cursor()
+            from datetime import datetime, timezone
+            now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
             for tx in transactions:
                 listing_id = str(tx.get('listing_id', ''))
                 sku = tx.get('sku', '').strip().upper()
@@ -451,24 +462,37 @@ def etsySyncOrders():
                                 sold_price = ?, 
                                 sold_channel = 'Etsy', 
                                 etsy_listing_id = ?, 
-                                sold_at = COALESCE(NULLIF(sold_at, ''), datetime('now')), 
-                                updated_at = datetime('now') 
+                                sold_at = COALESCE(NULLIF(sold_at, ''), ?), 
+                                updated_at = ? 
                             WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');
-                        """, (price_amount, listing_id, grp, s_id))
+                        """, (price_amount, listing_id, now_str, now_str, grp, s_id))
                         if curs.rowcount > 0:
                             synced_count += curs.rowcount
+                            db_instance.enqueue_mutation(grp, s_id, 'MARK_SOLD', {
+                                'status': 'SOLD', 'sold_price': price_amount,
+                                'sold_channel': 'Etsy', 'etsy_listing_id': listing_id,
+                                'sold_at': now_str, 'updated_at': now_str
+                            })
                 elif listing_id:
                     curs.execute("""
                         UPDATE inventory 
                         SET status = 'SOLD', 
                             sold_price = ?, 
                             sold_channel = 'Etsy', 
-                            sold_at = COALESCE(NULLIF(sold_at, ''), datetime('now')), 
-                            updated_at = datetime('now') 
+                            sold_at = COALESCE(NULLIF(sold_at, ''), ?), 
+                            updated_at = ? 
                         WHERE etsy_listing_id = ? AND (status IS NULL OR status != 'SOLD');
-                    """, (price_amount, listing_id))
+                    """, (price_amount, now_str, now_str, listing_id))
                     if curs.rowcount > 0:
                         synced_count += curs.rowcount
+                        # Lookup sku_group/sku_id for the enqueue
+                        curs.execute("SELECT sku_group, sku_id FROM inventory WHERE etsy_listing_id = ?;", (listing_id,))
+                        matched = curs.fetchone()
+                        if matched:
+                            db_instance.enqueue_mutation(matched['sku_group'], matched['sku_id'], 'MARK_SOLD', {
+                                'status': 'SOLD', 'sold_price': price_amount,
+                                'sold_channel': 'Etsy', 'sold_at': now_str, 'updated_at': now_str
+                            })
 
         # Engine 2: Safety net - Fetch listings with state 'sold_out'
         sold_out_data = client.get_shop_listings_by_state(access_token, state='sold_out', limit=100)
@@ -476,6 +500,8 @@ def etsySyncOrders():
         
         with db_instance.conn as conn:
             curs = conn.cursor()
+            from datetime import datetime, timezone
+            now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
             for listing in sold_out_listings:
                 listing_id = str(listing.get('listing_id', ''))
                 sku = listing.get('sku', '').strip().upper()
@@ -492,15 +518,17 @@ def etsySyncOrders():
                                 sold_price = ?, 
                                 sold_channel = 'Etsy', 
                                 etsy_listing_id = ?, 
-                                sold_at = COALESCE(NULLIF(sold_at, ''), datetime('now')), 
-                                updated_at = datetime('now') 
+                                sold_at = COALESCE(NULLIF(sold_at, ''), ?), 
+                                updated_at = ? 
                             WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');
-                        """, (price_amount, listing_id, grp, s_id))
+                        """, (price_amount, listing_id, now_str, now_str, grp, s_id))
                         if curs.rowcount > 0:
                             synced_count += curs.rowcount
-
-        if synced_count > 0:
-            trigger_async_sync()
+                            db_instance.enqueue_mutation(grp, s_id, 'MARK_SOLD', {
+                                'status': 'SOLD', 'sold_price': price_amount,
+                                'sold_channel': 'Etsy', 'etsy_listing_id': listing_id,
+                                'sold_at': now_str, 'updated_at': now_str
+                            })
 
         # Engine 3: Clean up local items whose drafts/listings were deleted on Etsy.com
         deleted_reset_count = sync_deleted_etsy_drafts(client, access_token)
@@ -519,7 +547,8 @@ def markSold(sku_group: str, sku_id: int):
     data = request.json or {}
     price = data.get('price', 0.0)
     channel = data.get('channel', 'Offline')
-    
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     with db_instance.conn as conn:
         curs = conn.cursor()
         curs.execute("""
@@ -527,30 +556,41 @@ def markSold(sku_group: str, sku_id: int):
             SET status = 'SOLD', 
                 sold_price = ?, 
                 sold_channel = ?, 
-                sold_at = datetime('now'), 
-                updated_at = datetime('now') 
+                sold_at = ?, 
+                updated_at = ? 
             WHERE sku_group = ? AND sku_id = ?;
-        """, (price, channel, sku_group, sku_id))
+        """, (price, channel, now_str, now_str, sku_group, sku_id))
         conn.commit()
         if curs.rowcount > 0:
-            trigger_async_sync()
+            db_instance.enqueue_mutation(sku_group, sku_id, 'MARK_SOLD', {
+                'status': 'SOLD',
+                'sold_price': price,
+                'sold_channel': channel,
+                'sold_at': now_str,
+                'updated_at': now_str
+            })
             return jsonify(message(f'Marked {sku_group}-{sku_id:03d} as SOLD')), 200
         else:
             return jsonify(message('Item not found')), 404
 
 @app.route('/api/restoreItem/<sku_group>/<int:sku_id>', methods=['POST'])
 def restoreItem(sku_group: str, sku_id: int):
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     with db_instance.conn as conn:
         curs = conn.cursor()
         curs.execute("""
             UPDATE inventory 
             SET status = 'IN_STOCK', 
-                updated_at = datetime('now') 
+                updated_at = ? 
             WHERE sku_group = ? AND sku_id = ?;
-        """, (sku_group, sku_id))
+        """, (now_str, sku_group, sku_id))
         conn.commit()
         if curs.rowcount > 0:
-            trigger_async_sync()
+            db_instance.enqueue_mutation(sku_group, sku_id, 'RESTORE_ITEM', {
+                'status': 'IN_STOCK',
+                'updated_at': now_str
+            })
             return jsonify(message(f'Restored {sku_group}-{sku_id:03d} to IN_STOCK')), 200
         else:
             return jsonify(message('Item not found')), 404
@@ -611,7 +651,8 @@ def pushListing(sku_group: str, sku_id: int):
 def sync_deleted_etsy_drafts(client, access_token):
     """
     Cross-checks local database listings against live Etsy active & draft listings.
-    If a draft/listing was deleted from Etsy.com, resets local item back to IN_STOCK.
+    If a draft/listing was deleted from Etsy.com, resets local item back to IN_STOCK
+    and enqueues a RESET_ETSY_DRAFT mutation for Turso.
     """
     reset_count = 0
     try:
@@ -630,7 +671,7 @@ def sync_deleted_etsy_drafts(client, access_token):
             curs = conn.cursor()
             curs.execute("SELECT sku_group, sku_id, etsy_listing_id FROM inventory WHERE is_deleted = 0 AND etsy_listing_id IS NOT NULL AND etsy_listing_id != '' AND (status IS NULL OR status = 'LISTED_ETSY');")
             rows = curs.fetchall()
-            
+
             for row in rows:
                 loc_id = str(row['etsy_listing_id'])
                 if loc_id not in live_ids:
@@ -642,23 +683,16 @@ def sync_deleted_etsy_drafts(client, access_token):
                             updated_at = ? 
                         WHERE sku_group = ? AND sku_id = ?;
                     """, (now_str, row['sku_group'], row['sku_id']))
-                    reset_count += curs.rowcount
-
-                    if turso_client is not None:
-                        try:
-                            turso_client.execute("""
-                                UPDATE inventory 
-                                SET status = 'IN_STOCK', 
-                                    etsy_listing_id = '', 
-                                    updated_at = ? 
-                                WHERE sku_group = ? AND sku_id = ?;
-                            """, [now_str, row['sku_group'], row['sku_id']])
-                        except Exception as te:
-                            print(f"[sync] Turso draft reset notice for {row['sku_group']}-{row['sku_id']}: {te}")
+                    if curs.rowcount > 0:
+                        reset_count += 1
+                        db_instance.enqueue_mutation(row['sku_group'], row['sku_id'], 'RESET_ETSY_DRAFT', {
+                            'status': 'IN_STOCK',
+                            'etsy_listing_id': '',
+                            'updated_at': now_str
+                        })
 
             if reset_count > 0:
                 conn.commit()
-                trigger_async_sync()
                 print(f"[sync] Reset {reset_count} local items whose Etsy drafts/listings were deleted on Etsy.com!")
     except Exception as e:
         print(f"[sync] sync_deleted_etsy_drafts error: {e}")
@@ -963,18 +997,12 @@ def bulkPush():
                 finally:
                     conn_w.close()
 
-                # Update Turso directly with synchronized timestamp
-                if turso_client is not None:
-                    try:
-                        turso_client.execute("""
-                            UPDATE inventory 
-                            SET status = 'LISTED_ETSY', 
-                                etsy_listing_id = ?, 
-                                updated_at = ? 
-                            WHERE sku_group = ? AND sku_id = ?;
-                        """, [str(listing_id), now_str, sku_group, sku_id])
-                    except Exception as te:
-                        print(f"[bulkPush] Turso direct update notice for {sku_key}: {te}")
+                # Enqueue ASSIGN_ETSY_LISTING mutation for OutboxFlusher to send to Turso
+                db_instance.enqueue_mutation(sku_group, sku_id, 'ASSIGN_ETSY_LISTING', {
+                    'status': 'LISTED_ETSY',
+                    'etsy_listing_id': str(listing_id),
+                    'updated_at': now_str
+                })
                 
                 item_total_time = time.perf_counter() - item_start_time
                 print(f"[bulkPush] {sku_key} listed in {item_total_time:.2f}s (Draft: {t_draft:.2f}s | SKU: {t_inv:.2f}s | Photos: {t_photos:.2f}s)")

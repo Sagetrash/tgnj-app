@@ -74,6 +74,16 @@ class database:
             self.conn.execute("CREATE TABLE IF NOT EXISTS _etsy_config (key TEXT PRIMARY KEY, value TEXT);")
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_inventory_updated_at ON inventory(updated_at);")
             self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS outbox (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT NOT NULL,
+                    sku_group  TEXT NOT NULL,
+                    sku_id     INTEGER NOT NULL,
+                    action     TEXT NOT NULL,
+                    payload    TEXT NOT NULL
+                );
+            """)
+            self.conn.execute("""
                 UPDATE inventory 
                 SET updated_at = datetime('now') 
                 WHERE updated_at = '' 
@@ -226,8 +236,10 @@ class database:
 
     def apply_remote_changes(self, rows: list[dict]) -> int:
         """
-        Upsert a batch of remote rows into local SQLite — matched by natural key (sku_group, sku_id).
-        Only writes if remote updated_at >= local updated_at and actual data has changed.
+        Mirror a batch of Turso master rows into the local SQLite view cache.
+        Matched by natural key (sku_group, sku_id). Turso is the master — remote
+        state is always applied unless the data is identical (no-op skip to avoid
+        unnecessary disk writes).
         Returns the number of rows actually updated or inserted locally.
         """
         check_query = "SELECT * FROM inventory WHERE sku_group = ? AND sku_id = ?;"
@@ -258,37 +270,22 @@ class database:
                     curs.execute(check_query, (sku_group, sku_id))
                     existing = curs.fetchone()
 
-                    status_val = row.get('status', 'IN_STOCK')
-                    listing_id_val = row.get('etsy_listing_id', '')
-                    sold_price_val = float(row.get('sold_price') or 0.0)
-                    sold_channel_val = row.get('sold_channel', '')
-                    sold_at_val = row.get('sold_at', '')
-                    created_at_val = row.get('created_at', '')
-                    updated_at_val = row.get('updated_at', '')
-                    is_deleted_val = int(row.get('is_deleted') or 0)
-                    shape_val = row.get('shape')
-                    weight_val = row.get('weight')
-                    length_val = row.get('length')
-                    width_val = row.get('width')
-                    depth_val = row.get('depth')
+                    status_val      = row.get('status') or 'IN_STOCK'
+                    listing_id_val  = row.get('etsy_listing_id') or ''
+                    sold_price_val  = float(row.get('sold_price') or 0.0)
+                    sold_channel_val = row.get('sold_channel') or ''
+                    sold_at_val     = row.get('sold_at') or ''
+                    created_at_val  = row.get('created_at') or ''
+                    updated_at_val  = row.get('updated_at') or ''
+                    is_deleted_val  = int(row.get('is_deleted') or 0)
+                    shape_val       = row.get('shape')
+                    weight_val      = row.get('weight')
+                    length_val      = row.get('length')
+                    width_val       = row.get('width')
+                    depth_val       = row.get('depth')
 
                     if existing:
-                        local_ts = (existing['updated_at'] or '').replace('T', ' ').replace('Z', '').strip()
-                        remote_ts = (row.get('updated_at') or '').replace('T', ' ').replace('Z', '').strip()
-                        # Skip if local timestamp is strictly newer
-                        if local_ts and remote_ts and local_ts > remote_ts:
-                            continue
-
-                        # Guard: Protect valid local etsy_listing_id from being wiped by stale remote rows
-                        local_listing_id = (existing['etsy_listing_id'] or '')
-                        local_status = (existing['status'] or 'IN_STOCK')
-                        if local_listing_id and not listing_id_val:
-                            # Preserve listing ID if remote status is LISTED_ETSY or local was LISTED_ETSY (and not explicitly reset to IN_STOCK)
-                            if status_val == 'LISTED_ETSY' or (local_status == 'LISTED_ETSY' and status_val != 'IN_STOCK'):
-                                listing_id_val = local_listing_id
-                                status_val = local_status
-
-                        # Check if any field actually changed compared to local existing record
+                        # No-op skip: avoid disk write if data is identical
                         if (str(existing['shape'] or '') == str(shape_val or '') and
                             float(existing['weight'] or 0.0) == float(weight_val or 0.0) and
                             str(existing['length'] or '') == str(length_val or '') and
@@ -300,7 +297,6 @@ class database:
                             float(existing['sold_price'] or 0.0) == sold_price_val and
                             str(existing['sold_channel'] or '') == str(sold_channel_val or '') and
                             str(existing['sold_at'] or '') == str(sold_at_val or '')):
-                            # No actual data change — skip redundant SQL update
                             continue
 
                         curs.execute(update_query, (
@@ -414,6 +410,61 @@ class database:
                 if curs:
                     curs.close()
 
+
+    # ——— Outbox helpers ———
+
+    def enqueue_mutation(self, sku_group: str, sku_id: int, action: str, payload: dict):
+        """Append an atomic mutation to the local outbox table."""
+        import json
+        from datetime import datetime, timezone
+        created_at = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        with self.conn as conn:
+            try:
+                conn.execute(
+                    "INSERT INTO outbox (created_at, sku_group, sku_id, action, payload) VALUES (?, ?, ?, ?, ?);",
+                    (created_at, sku_group, sku_id, action, json.dumps(payload))
+                )
+            except sql.Error as e:
+                print(f"[database] enqueue_mutation error: {e}")
+
+    def pop_outbox_batch(self, limit: int = 50) -> list[dict]:
+        """Return up to `limit` oldest outbox rows in FIFO order (does NOT delete them)."""
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute("SELECT * FROM outbox ORDER BY id ASC LIMIT ?;", (limit,))
+                return [dict(row) for row in curs.fetchall()]
+            except sql.Error as e:
+                print(f"[database] pop_outbox_batch error: {e}")
+                return []
+            finally:
+                if curs:
+                    curs.close()
+
+    def delete_outbox_ids(self, ids: list[int]):
+        """Remove successfully flushed entries from the outbox by id."""
+        if not ids:
+            return
+        placeholders = ",".join("?" for _ in ids)
+        with self.conn as conn:
+            try:
+                conn.execute(f"DELETE FROM outbox WHERE id IN ({placeholders});", ids)
+            except sql.Error as e:
+                print(f"[database] delete_outbox_ids error: {e}")
+
+    def get_outbox_count(self) -> int:
+        """Return current number of pending outbox mutations."""
+        with self.conn as conn:
+            try:
+                curs = conn.cursor()
+                curs.execute("SELECT COUNT(*) as c FROM outbox;")
+                row = curs.fetchone()
+                return row['c'] if row else 0
+            except sql.Error:
+                return 0
+            finally:
+                if curs:
+                    curs.close()
 
     def get_etsy_config(self, key: str) -> str:
         """Fetch a value from _etsy_config table."""

@@ -88,7 +88,7 @@ class TursoClient:
             return None
 
     def ensure_schema(self) -> bool:
-        """Ensure inventory and _sync_meta tables exist on Turso."""
+        """Ensure inventory and _sync_meta tables exist on Turso with all required columns."""
         schema_stmts = [
             {
                 "sql": """
@@ -103,16 +103,23 @@ class TursoClient:
                     depth INTEGER,
                     created_at TEXT DEFAULT '',
                     updated_at TEXT DEFAULT '',
-                    is_deleted INTEGER DEFAULT 0
+                    is_deleted INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'IN_STOCK',
+                    etsy_listing_id TEXT DEFAULT '',
+                    sold_price REAL DEFAULT 0.0,
+                    sold_channel TEXT DEFAULT '',
+                    sold_at TEXT DEFAULT ''
                 );
                 """
             },
-            {
-                "sql": "CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);"
-            },
-            {
-                "sql": "CREATE INDEX IF NOT EXISTS idx_inventory_updated_at ON inventory(updated_at);"
-            }
+            {"sql": "ALTER TABLE inventory ADD COLUMN status TEXT DEFAULT 'IN_STOCK';"},
+            {"sql": "ALTER TABLE inventory ADD COLUMN etsy_listing_id TEXT DEFAULT '';"},
+            {"sql": "ALTER TABLE inventory ADD COLUMN sold_price REAL DEFAULT 0.0;"},
+            {"sql": "ALTER TABLE inventory ADD COLUMN sold_channel TEXT DEFAULT '';"},
+            {"sql": "ALTER TABLE inventory ADD COLUMN sold_at TEXT DEFAULT '';"},
+            {"sql": "UPDATE inventory SET status = 'IN_STOCK' WHERE status IS NULL OR status = '';"},
+            {"sql": "CREATE TABLE IF NOT EXISTS _sync_meta (key TEXT PRIMARY KEY, value TEXT);"},
+            {"sql": "CREATE INDEX IF NOT EXISTS idx_inventory_updated_at ON inventory(updated_at);"}
         ]
         res = self.execute_batch(schema_stmts)
         return res is not None

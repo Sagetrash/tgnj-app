@@ -1,16 +1,22 @@
 """
-sync.py — Bidirectional sync engine between local SQLite and Turso Cloud.
+sync.py — Sync engine between local SQLite Outbox and Turso Cloud Master.
 
-Push: send local changes to Turso (INSERT OR REPLACE or DELETE)
-Pull: fetch remote changes from Turso and apply to local SQLite
+OutboxFlusher: drains the local outbox table to Turso with targeted field-level
+  SQL mutations in strict FIFO order. Works online or offline — mutations queue
+  up safely and are sent when Turso is reachable.
 
-All timestamps are UTC ISO-8601 strings (e.g. '2026-01-01T12:00:00').
-Conflict resolution: last-write-wins on updated_at.
+Pull: fetches remote master changes from Turso and mirrors them into the local
+  SQLite view cache (Turso is the single source of truth).
+
+All timestamps are UTC strings (e.g. '2026-01-01 12:00:00').
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,9 +35,145 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 
-BATCH_SIZE = 250
+BATCH_SIZE = 50
 PULL_OVERLAP_SECONDS = 120  # Re-query lookback buffer to eliminate multi-device watermark races
 
+# Columns allowed in UPDATE_FIELDS mutations (guards against injection of status/etsy fields via edit route)
+ALLOWED_EDIT_FIELDS = frozenset({'shape', 'weight', 'length', 'width', 'depth'})
+
+
+class OutboxFlusher:
+    """
+    Background thread that reads the local `outbox` table and executes targeted,
+    field-level SQL mutations on Turso Master in strict FIFO order.
+
+    - Mutations only contain the fields that actually changed.
+    - If Turso is unreachable, entries remain in the outbox and are retried.
+    - Runs independently of the pull sync loop.
+    """
+    FLUSH_INTERVAL = 2  # seconds between flush attempts
+    FLUSH_BATCH = 50
+
+    def __init__(self, db: 'database', turso: 'TursoClient'):
+        self.db = db
+        self.turso = turso
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name='outbox-flusher'
+        )
+
+    def start(self):
+        """Flush any queued mutations immediately, then start the background loop."""
+        self._flush_once()
+        self._thread.start()
+
+    def _build_statement(self, entry: dict) -> dict | None:
+        """Convert one outbox entry into a Turso pipeline SQL statement dict."""
+        action = entry['action']
+        try:
+            payload = json.loads(entry['payload'])
+        except (json.JSONDecodeError, TypeError):
+            print(f"[outbox] Bad payload for outbox id={entry.get('id')}: {entry.get('payload')}")
+            return None
+
+        sg = entry['sku_group']
+        si = entry['sku_id']
+        now = _utcnow()
+
+        if action == 'UPDATE_FIELDS':
+            # Only forward allowed inventory dimension/shape fields
+            fields = {k: v for k, v in payload.items() if k in ALLOWED_EDIT_FIELDS}
+            if not fields:
+                return None
+            fields['updated_at'] = now
+            set_clause = ', '.join(f"{k} = ?" for k in fields)
+            args = list(fields.values()) + [sg, si]
+            return {
+                "sql": f"UPDATE inventory SET {set_clause} WHERE sku_group = ? AND sku_id = ? AND COALESCE(is_deleted,0) = 0;",
+                "args": args
+            }
+
+        elif action == 'ADD_ITEM':
+            return {
+                "sql": """
+                    INSERT OR REPLACE INTO inventory
+                        (sku_group, sku_id, shape, weight, length, width, depth,
+                         created_at, updated_at, is_deleted, status, etsy_listing_id,
+                         sold_price, sold_channel, sold_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'IN_STOCK', '', 0.0, '', '');
+                """,
+                "args": [
+                    sg, si,
+                    payload.get('shape', ''),
+                    payload.get('weight', 0.0),
+                    payload.get('length', 0),
+                    payload.get('width', 0),
+                    payload.get('depth', 0),
+                    payload.get('created_at', now),
+                    now
+                ]
+            }
+
+        elif action == 'DELETE_ITEM':
+            return {
+                "sql": "UPDATE inventory SET is_deleted = 1, updated_at = ? WHERE sku_group = ? AND sku_id = ?;",
+                "args": [now, sg, si]
+            }
+
+        elif action in ('ASSIGN_ETSY_LISTING', 'MARK_SOLD', 'RESTORE_ITEM', 'RESET_ETSY_DRAFT'):
+            if not payload:
+                return None
+            set_parts = [f"{k} = ?" for k in payload]
+            args = list(payload.values()) + [sg, si]
+            return {
+                "sql": f"UPDATE inventory SET {', '.join(set_parts)} WHERE sku_group = ? AND sku_id = ?;",
+                "args": args
+            }
+
+        print(f"[outbox] Unknown action '{action}' for outbox id={entry.get('id')} — skipping")
+        return None
+
+    def _flush_once(self):
+        """Read and flush one batch from the outbox. Safe to call from any thread."""
+        try:
+            batch = self.db.pop_outbox_batch(limit=self.FLUSH_BATCH)
+            if not batch:
+                return
+            statements = []
+            valid_ids = []
+            for entry in batch:
+                stmt = self._build_statement(entry)
+                if stmt is not None:
+                    statements.append(stmt)
+                    valid_ids.append(entry['id'])
+                else:
+                    # Un-parseable entries are dropped so they don't block the queue
+                    valid_ids.append(entry['id'])
+
+            if statements:
+                result = self.turso.execute_batch(statements)
+                if result is None:
+                    # Turso unreachable — leave entries in outbox for next retry
+                    print(f"[outbox] Turso unreachable — {len(statements)} mutation(s) queued")
+                    return
+
+            # Delete all entries (including un-parseable ones) from outbox
+            self.db.delete_outbox_ids(valid_ids)
+            if statements:
+                print(f"[outbox] Flushed {len(statements)} mutation(s) to Turso")
+        except Exception as ex:
+            print(f"[outbox] Flush error: {ex}")
+
+    def _run(self):
+        while True:
+            time.sleep(self.FLUSH_INTERVAL)
+            self._flush_once()
+
+
+def start_outbox_flusher(db: 'database', turso: 'TursoClient') -> OutboxFlusher:
+    """Instantiate and start the OutboxFlusher daemon thread. Returns the instance."""
+    flusher = OutboxFlusher(db, turso)
+    flusher.start()
+    return flusher
 
 def _batch_push_rows(turso: 'TursoClient', rows: list[dict]) -> int:
     """Push a list of row dicts to Turso in batches of 100 using pipeline execution."""
@@ -50,12 +192,12 @@ def _batch_push_rows(turso: 'TursoClient', rows: list[dict]) -> int:
                 """,
                 "args": [
                     row.get('id'), row.get('sku_group'), row.get('sku_id'),
-                    row.get('shape'), row.get('weight'), row.get('length'),
-                    row.get('width'), row.get('depth'), row.get('created_at'),
-                    row.get('updated_at'), row.get('is_deleted', 0),
-                    row.get('status', 'IN_STOCK'), row.get('etsy_listing_id', ''),
-                    row.get('sold_price', 0.0), row.get('sold_channel', ''),
-                    row.get('sold_at', '')
+                    row.get('shape') or '', row.get('weight') or 0.0, row.get('length') or 0,
+                    row.get('width') or 0, row.get('depth') or 0, row.get('created_at') or '',
+                    row.get('updated_at') or '', row.get('is_deleted') or 0,
+                    row.get('status') or 'IN_STOCK', row.get('etsy_listing_id') or '',
+                    float(row.get('sold_price') or 0.0), row.get('sold_channel') or '',
+                    row.get('sold_at') or ''
                 ]
             })
 
