@@ -102,8 +102,8 @@ def start_sync_loop(interval: int = 30):
             if turso_client is not None and db_instance is not None:
                 try:
                     with sync_lock:
-                        result = sync_engine.sync(db_instance, turso_client)
-                    print(f"[sync] Auto-sync: pushed={result.get('pushed', 0)} pulled={result.get('pulled', 0)}")
+                        result = sync_engine.sync_pull(db_instance, turso_client)
+                    print(f"[sync] Auto-sync pull: pulled={result}")
                 except Exception as e:
                     print(f"[sync] Auto-sync error: {e}")
 
@@ -666,14 +666,22 @@ def sync_deleted_etsy_drafts(client, access_token):
                 if lst.get('listing_id'):
                     live_ids.add(str(lst.get('listing_id')))
 
-        from datetime import datetime, timezone
+        from datetime import datetime, timezone, timedelta
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(minutes=10)
+        cutoff_str = cutoff_dt.strftime('%Y-%m-%d %H:%M:%S')
+
         with db_instance.conn as conn:
             curs = conn.cursor()
-            curs.execute("SELECT sku_group, sku_id, etsy_listing_id FROM inventory WHERE is_deleted = 0 AND etsy_listing_id IS NOT NULL AND etsy_listing_id != '' AND (status IS NULL OR status = 'LISTED_ETSY');")
+            curs.execute("SELECT sku_group, sku_id, etsy_listing_id, updated_at FROM inventory WHERE is_deleted = 0 AND etsy_listing_id IS NOT NULL AND etsy_listing_id != '' AND (status IS NULL OR status = 'LISTED_ETSY');")
             rows = curs.fetchall()
 
             for row in rows:
                 loc_id = str(row['etsy_listing_id'])
+                updated_at = (row['updated_at'] or '').replace('T', ' ').replace('Z', '').strip()
+                # Skip resetting if listing was updated/created in the last 10 minutes (allows Etsy search index time to catch up)
+                if updated_at and updated_at >= cutoff_str:
+                    continue
+
                 if loc_id not in live_ids:
                     now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                     curs.execute("""
