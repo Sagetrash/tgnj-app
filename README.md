@@ -1,23 +1,23 @@
 # TGNJ Inventory Manager
 
-🚧 **Status: Under Development** _This is an internal project built specifically for TGNJ and serves as a personal learning initiative to explore Python-based desktop application architecture._
+🚧 **Status: Active Development** _An internal inventory, Etsy integration, and multi-device cloud synchronization manager for TGNJ._
 
 ---
 
 ## 📖 Overview
 
-TGNJ Inventory Manager is a local-first application designed to track and manage itemized stone data. Rather than relying entirely on complex spreadsheets or cloud-based SaaS, this tool provides a dedicated, searchable interface that runs on your local machine, with seamless background synchronization to the cloud.
+TGNJ Inventory Manager is a local-first application designed to track itemized gemstone inventory and manage Etsy shop listings seamlessly. Rather than relying on spreadsheets, this application provides a dedicated interface that runs locally with instant UI response times (< 1ms) and background synchronization to **Turso Cloud DB Master**.
 
 ### Key Features
-- **Local-First Architecture:** Operates entirely locally using an optimized SQLite database (WAL mode).
-- **Turso Cloud Sync:** Bi-directional synchronization with Turso (libSQL) ensuring your data is backed up and accessible across devices, with last-write-wins conflict resolution.
-- **Data Import & Export:** Built-in tools for uploading legacy CSV data and extracting current database tables to CSV format.
+- **Always-Enqueue Outbox Architecture:** Local writes (`addItem`, `editItem`, `deleteItem`, `markSold`, `bulkPush`) append atomic mutations to a local SQLite `outbox` queue and respond instantly. A background `OutboxFlusher` thread drains mutations to Turso Cloud Master in strict FIFO order every 2 seconds.
+- **Turso Cloud Master DB:** Turso serves as the single source of truth. Devices pull master updates every 30 seconds to keep local view caches 100% mirrored across laptops without race conditions or field-erasure bugs.
+- **Etsy Integration Hub:**
+  - **OAuth 2.0 PKCE Authorization:** Connect your Etsy seller account safely.
+  - **Bulk Draft Publishing:** Push gemstone batches to Etsy with auto-matched shop sections, shipping profiles, custom property tags, and S3 photo attachments.
+  - **Order & Sales Sync:** Fetch shop receipts and sold listings automatically, marking stones as `SOLD` with channel and price tracking.
+  - **Live Inventory Cross-Check:** Detect deleted Etsy drafts with a 2-minute grace period buffer (protecting against Etsy search index lag).
 - **Label Generation:** One-click PDF generation for printing custom inventory labels.
-
-### Learning Objectives
-- **Hybrid Desktop Apps:** Using `pywebview` to bridge a Flask/web backend with a native window.
-- **Cloud-Edge Synchronization:** Implementing robust bi-directional sync engines.
-- **Modern Tooling:** Mastering `uv` for lightning-fast, reproducible Python environments.
+- **Data Import & Export:** Built-in tools for uploading legacy CSV data and exporting inventory groups.
 
 ---
 
@@ -25,10 +25,11 @@ TGNJ Inventory Manager is a local-first application designed to track and manage
 
 - **Language:** Python 3.12+
 - **Backend:** Flask (RESTful API)
-- **Database:** SQLite (Local) / Turso (Cloud Sync)
+- **Database:** SQLite (Local View Cache & Outbox Queue) / Turso (Cloud Master DB)
+- **Integrations:** Etsy v3 REST API (OAuth 2.0 PKCE, S3 Image Hosting)
 - **Frontend:** HTML5, CSS3, JavaScript (Jinja2 Templates)
-- **Container:** PyWebview
-- **Environment:** [uv](https://github.com/astral-sh/uv)
+- **Container / Window:** PyWebview / Browser
+- **Environment & Package Manager:** [uv](https://github.com/astral-sh/uv)
 
 ---
 
@@ -36,30 +37,43 @@ TGNJ Inventory Manager is a local-first application designed to track and manage
 
 ### 1. Prerequisites
 
-This project is **cross-platform** (Windows, macOS, Linux). You will need Python installed. We highly recommend using `uv` for dependency management.
-
-### 2. Installation
-
-Clone the repository and install dependencies using `uv`:
+Python 3.12+ installed. We recommend using `uv` for lightning-fast dependency management:
 
 ```bash
 git clone https://github.com/your-username/tgnj-app.git
 cd tgnj-app
 ```
 
-### 3. Running the App
-
-You don't need to manually set up a virtual environment; `uv` handles it automatically:
+### 2. Running the App
 
 ```bash
 uv run src/tgnj_app/main.py
 ```
 
-### 4. Configuring Turso Sync
+### 3. Configuring Turso Cloud Sync & Etsy Integration
 
-1. Create a Turso database and obtain your database URL (`libsql://...`) and auth token.
-2. Launch the app and click the **Sync** button in the UI header.
-3. Enter your Turso credentials to enable automatic background synchronization.
+1. **Turso Sync**: Enter your Turso database URL (`libsql://...`) and auth token via `/api/setTursoConfig` or the UI header.
+2. **Etsy Integration**: Configure your Etsy API key, shared secret, and shop ID on the Etsy Hub page (`/etsy`), then authorize via OAuth.
+
+---
+
+## 📡 Internal API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/getData/<group>` | Fetch active items by SKU group. |
+| `POST` | `/api/addItem` | Add stone to local SQLite & enqueue `ADD_ITEM` outbox mutation. |
+| `PATCH` | `/api/editItem/<group>/<id>` | Update stone dimensions & enqueue `UPDATE_FIELDS` outbox mutation. |
+| `DELETE` | `/api/deleteItem/<group>/<id>` | Soft-delete stone & enqueue `DELETE_ITEM` outbox mutation. |
+| `POST` | `/api/markSold/<group>/<id>` | Mark stone as `SOLD` & enqueue `MARK_SOLD` outbox mutation. |
+| `POST` | `/api/restoreItem/<group>/<id>` | Restore stone to `IN_STOCK` & enqueue `RESTORE_ITEM` outbox mutation. |
+| `POST` | `/api/etsy/bulkPush` | Publish draft listings to Etsy & enqueue `ASSIGN_ETSY_LISTING` mutations. |
+| `POST` | `/api/etsy/syncOrders` | Sync Etsy sales & receipts, updating sold statuses across databases. |
+| `GET` | `/api/etsy/liveStats` | Fetch live Etsy stats & cross-check deleted drafts (2-min buffer). |
+| `GET` | `/api/printPdf/<group>` | Generate and download custom label PDF. |
+| `GET` | `/api/getCsvData/<group>` | Export group inventory to TSV/CSV format. |
+| `PATCH` | `/api/setTursoConfig` | Save Turso URL & Auth Token. |
+| `POST` | `/api/runSync` | Trigger a manual pull sync from Turso Master. |
 
 ---
 
@@ -69,40 +83,21 @@ uv run src/tgnj_app/main.py
 tgnj-app/
 ├── src/
 │   └── tgnj_app/
-│       ├── core/           # Database wrapper, Turso client, Sync engine, PDF generation
-│       ├── gui/            # Flask API, CSS, JS, and Templates
-│       │   ├── static/     # Static assets (JS, CSS, Logos)
-│       │   └── templates/  # HTML views
-│       └── main.py         # Application entry point & window launch
-├── scripts/                # Utility scripts (e.g., initial Turso migration)
-├── pyproject.toml          # Project metadata & dependencies
+│       ├── core/
+│       │   ├── database.py      # SQLite view cache & outbox queue
+│       │   ├── sync.py          # OutboxFlusher & Turso pull sync engine
+│       │   ├── turso_client.py   # Turso libSQL HTTP client
+│       │   ├── etsy_client.py    # Etsy v3 API client (OAuth PKCE, listings)
+│       │   ├── csv_exporter.py   # CSV export utilities
+│       │   └── labelmaker.py     # PDF label generation
+│       ├── gui/
+│       │   ├── app.py           # Flask REST API & web routes
+│       │   ├── static/          # CSS, JS (main & etsy hub)
+│       │   └── templates/       # HTML views
+│       └── main.py              # App entry point
+├── tests/
+│   └── test_tgnj_app.py         # Unit test suite
+├── pyproject.toml
 └── README.md
 ```
 
----
-
-## 📡 Internal API
-
-The GUI communicates with a local Flask server via these primary endpoints:
-
-| Method   | Endpoint                  | Description                               |
-| -------- | ------------------------- | ----------------------------------------- |
-| `GET`    | `/api/getData/<group>`    | Fetch active items by SKU group.          |
-| `POST`   | `/api/addItem`            | Add a new item to the database.           |
-| `PATCH`  | `/api/editItem/<id>`      | Update an existing item's details.        |
-| `DELETE` | `/api/deleteItem/<id>`    | Soft-delete an item from inventory.       |
-| `GET`    | `/api/printPdf/<group>`   | Generate and download a label PDF.        |
-| `GET`    | `/api/getCsvData/<group>` | Export group inventory to CSV format.     |
-| `POST`   | `/api/UploadLegacyCsv`    | Import inventory data from a legacy CSV.  |
-| `PATCH`  | `/api/setTursoConfig`     | Update and save Turso sync credentials.   |
-| `POST`   | `/api/runSync`            | Manually trigger a database sync cycle.   |
-
----
-
-## 📝 Roadmap / To-Do
-
-- [x] Implement bulk CSV import for legacy data.
-- [x] Local-first cloud sync with Turso.
-- [x] Automated PDF label generation.
-- [ ] Add image upload support for stone identification.
-- [ ] Refine CSS for better high-DPI display support.
