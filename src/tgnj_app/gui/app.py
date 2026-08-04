@@ -667,7 +667,7 @@ def sync_deleted_etsy_drafts(client, access_token):
                     live_ids.add(str(lst.get('listing_id')))
 
         from datetime import datetime, timezone, timedelta
-        cutoff_dt = datetime.now(timezone.utc) - timedelta(minutes=10)
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(minutes=2)
         cutoff_str = cutoff_dt.strftime('%Y-%m-%d %H:%M:%S')
 
         with db_instance.conn as conn:
