@@ -208,5 +208,28 @@ class TestTgnjApp(unittest.TestCase):
         # etsy_listing_id must NOT appear in the UPDATE SET clause
         self.assertNotIn('etsy_listing_id', stmt['sql'])
 
+    def test_sync_deleted_etsy_drafts_connection_safety_guard(self):
+        """Verify sync_deleted_etsy_drafts NEVER resets listings if API returns empty live_ids or 401 error."""
+        from tgnj_app.gui.app import sync_deleted_etsy_drafts
+
+        self.db.add_item("SAFE", 1, "Pear", 10.0, 12, 8, 4)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = '77777', updated_at = '2026-08-01 10:00:00' WHERE sku_group = 'SAFE' AND sku_id = 1;"
+            )
+
+        # Mock EtsyClient returning empty results (e.g. 401 Unauthorized or disconnected)
+        mock_client = MagicMock()
+        mock_client.get_shop_listings_by_state.return_value = {"error": "invalid_token", "results": []}
+
+        with patch('tgnj_app.gui.app.db_instance', self.db):
+            reset_count = sync_deleted_etsy_drafts(mock_client, "fake_token")
+            self.assertEqual(reset_count, 0)  # Safety guard triggered!
+
+        # Item remains LISTED_ETSY with listing_id = 77777 (not wiped!)
+        item = self.db.get_item_by_sku("SAFE", 1)
+        self.assertEqual(item['status'], 'LISTED_ETSY')
+        self.assertEqual(item['etsy_listing_id'], '77777')
+
 if __name__ == "__main__":
     unittest.main()

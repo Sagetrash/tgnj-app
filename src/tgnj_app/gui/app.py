@@ -660,11 +660,19 @@ def sync_deleted_etsy_drafts(client, access_token):
         draft_resp = client.get_shop_listings_by_state(access_token, state='draft', limit=100)
         inactive_resp = client.get_shop_listings_by_state(access_token, state='inactive', limit=100)
 
+        # Connection Safety Guard: If API call failed or returned errors, DO NOT reset anything
         live_ids = set()
         for resp in [active_resp, draft_resp, inactive_resp]:
-            for lst in resp.get('results', []):
+            results = resp.get('results', []) if isinstance(resp, dict) else []
+            for lst in results:
                 if lst.get('listing_id'):
                     live_ids.add(str(lst.get('listing_id')))
+
+        # Critical Connection Flag Guard: If 0 live listings were returned (e.g. 401 Unauthorized, token expired, or network error),
+        # NEVER modify local or remote database records!
+        if not live_ids:
+            print("[sync] Etsy API returned 0 live IDs (API disconnected or error) — skipping draft deletion guard.")
+            return 0
 
         from datetime import datetime, timezone, timedelta
         cutoff_dt = datetime.now(timezone.utc) - timedelta(minutes=2)
@@ -678,7 +686,7 @@ def sync_deleted_etsy_drafts(client, access_token):
             for row in rows:
                 loc_id = str(row['etsy_listing_id'])
                 updated_at = (row['updated_at'] or '').replace('T', ' ').replace('Z', '').strip()
-                # Skip resetting if listing was updated/created in the last 10 minutes (allows Etsy search index time to catch up)
+                # Skip resetting if listing was updated/created in the last 2 minutes (allows Etsy search index time to catch up)
                 if updated_at and updated_at >= cutoff_str:
                     continue
 
@@ -722,7 +730,12 @@ def etsyLiveStats():
 
         client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
         
-        # Cross-check and reset deleted drafts
+        # Auto-refresh expired access token if needed before querying live stats
+        new_token = refresh_etsy_token_if_needed(client, refresh_token)
+        if new_token:
+            access_token = new_token
+
+        # Cross-check and reset deleted drafts (guarded by Etsy connection safety check)
         reset_count = sync_deleted_etsy_drafts(client, access_token)
 
         active_resp = client.get_shop_listings_by_state(access_token, state='active')
