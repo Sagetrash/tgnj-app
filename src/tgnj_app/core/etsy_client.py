@@ -266,6 +266,113 @@ class EtsyClient:
             print(f"[etsy_client] update_listing_property notice for prop #{property_id}: {e}")
             return {}
 
+    def deactivate_listing(self, access_token: str, listing_id: str) -> dict:
+        """
+        Deactivates an active or draft Etsy listing by setting state='inactive'.
+        Sends PATCH /v3/application/shops/{shop_id}/listings/{listing_id}.
+        """
+        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings/{listing_id}"
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        payload = {
+            "state": "inactive"
+        }
+        req = Request(url, data=urlencode(payload).encode("utf-8"), headers=headers, method="PATCH")
+        try:
+            with urlopen(req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8") if e.fp else str(e)
+            print(f"[etsy_client] deactivate_listing HTTPError {e.code}: {err_body}")
+            return {"error": err_body, "code": e.code}
+        except Exception as e:
+            print(f"[etsy_client] deactivate_listing exception: {e}")
+            return {"error": str(e)}
+
+    def reactivate_listing(self, access_token: str, listing_id: str) -> dict:
+        """
+        Reactivates an inactive Etsy listing by setting state='active'.
+        Sends PATCH /v3/application/shops/{shop_id}/listings/{listing_id}.
+        """
+        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings/{listing_id}"
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        payload = {
+            "state": "active"
+        }
+        req = Request(url, data=urlencode(payload).encode("utf-8"), headers=headers, method="PATCH")
+        try:
+            with urlopen(req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8") if e.fp else str(e)
+            print(f"[etsy_client] reactivate_listing HTTPError {e.code}: {err_body}")
+            return {"error": err_body, "code": e.code}
+        except Exception as e:
+            print(f"[etsy_client] reactivate_listing exception: {e}")
+            return {"error": str(e)}
+
+    def update_listing_title(self, access_token: str, listing_id: str, new_title: str) -> dict:
+        """
+        Updates the title of an Etsy listing (e.g. renames draft to 'delete').
+        Sends PATCH /v3/application/shops/{shop_id}/listings/{listing_id}.
+        """
+        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings/{listing_id}"
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        payload = {
+            "title": new_title
+        }
+        req = Request(url, data=urlencode(payload).encode("utf-8"), headers=headers, method="PATCH")
+        try:
+            with urlopen(req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8") if e.fp else str(e)
+            print(f"[etsy_client] update_listing_title HTTPError {e.code}: {err_body}")
+            return {"error": err_body, "code": e.code}
+        except Exception as e:
+            print(f"[etsy_client] update_listing_title exception: {e}")
+            return {"error": str(e)}
+
+
+    def delete_listing(self, access_token: str, listing_id: str) -> dict:
+        """
+        Deletes a draft, inactive, or sold-out Etsy listing.
+        Sends DELETE /v3/application/listings/{listing_id}.
+        """
+        url = f"{ETSY_API_BASE}/listings/{listing_id}"
+        headers = {
+            "x-api-key": self.api_key_header,
+            "Authorization": f"Bearer {access_token}"
+        }
+        req = Request(url, headers=headers, method="DELETE")
+        try:
+            with urlopen(req) as resp:
+                if resp.status in (200, 204):
+                    return {"success": True, "listing_id": listing_id}
+                body = resp.read().decode("utf-8")
+                return json.loads(body) if body else {"success": True}
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8") if e.fp else str(e)
+            print(f"[etsy_client] delete_listing HTTPError {e.code}: {err_body}")
+            return {"error": err_body, "code": e.code}
+        except Exception as e:
+            print(f"[etsy_client] delete_listing exception: {e}")
+            return {"error": str(e)}
+
+
+
+
     def update_listing_inventory(self, access_token: str, listing_id: str, sku: str, price: float, quantity: int = 1, readiness_state_id: int = None) -> dict:
         """
         Updates the product inventory for an Etsy listing to assign its SKU and price.

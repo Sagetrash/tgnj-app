@@ -250,6 +250,224 @@ class TestTgnjApp(unittest.TestCase):
             self.assertEqual(all_items[0]["listing_id"], 0)
             self.assertEqual(all_items[124]["listing_id"], 124)
 
+    def test_etsy_client_deactivate_listing_payload(self):
+        """Verify deactivate_listing sends PATCH state=inactive request."""
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+        with patch("tgnj_app.core.etsy_client.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = b'{"state": "inactive"}'
+            mock_resp.__enter__.return_value = mock_resp
+            mock_urlopen.return_value = mock_resp
+
+            res = client.deactivate_listing("fake_token", "12345")
+            self.assertEqual(res.get("state"), "inactive")
+            
+            # Check URL and method in request
+            req = mock_urlopen.call_args[0][0]
+            self.assertEqual(req.get_method(), "PATCH")
+            self.assertIn("/v3/application/shops/fake_shop/listings/12345", req.full_url)
+
+    def test_mark_sold_auto_deactivates_etsy_listing(self):
+        """Verify markSold endpoint deactivates Etsy listing if item was listed."""
+        self.db.add_item("TEST", 5, "Emerald", 2.5, 8, 6, 4)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = '998877' WHERE sku_group = 'TEST' AND sku_id = 5;"
+            )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db), \
+             patch('tgnj_app.gui.app.get_fresh_etsy_tokens', return_value=('key', 'sec', 'shop', 'tok', 'ref')), \
+             patch('tgnj_app.core.etsy_client.EtsyClient.deactivate_listing', return_value={'state': 'inactive'}) as mock_deactivate:
+            
+            response = self.client.post('/api/markSold/TEST/5', json={'price': 150.0, 'channel': 'Instagram'})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("deactivated Etsy Listing #998877", response.json['message'])
+            mock_deactivate.assert_called_once_with('tok', '998877')
+
+        # Item status updated to SOLD in database
+        item = self.db.get_item_by_sku("TEST", 5)
+        self.assertEqual(item['status'], 'SOLD')
+
+    def test_mark_sold_deletes_etsy_draft_listing(self):
+        """Verify markSold endpoint deletes Etsy draft listing if status was DRAFT_ETSY."""
+        self.db.add_item("TEST", 7, "Topaz", 1.5, 6, 4, 3)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'DRAFT_ETSY', etsy_listing_id = '112233' WHERE sku_group = 'TEST' AND sku_id = 7;"
+            )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db), \
+             patch('tgnj_app.gui.app.get_fresh_etsy_tokens', return_value=('key', 'sec', 'shop', 'tok', 'ref')), \
+             patch('tgnj_app.core.etsy_client.EtsyClient.delete_listing', return_value={'success': True}) as mock_delete:
+            
+            response = self.client.post('/api/markSold/TEST/7', json={'price': 40.0, 'channel': 'Offline'})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("deleted Etsy Draft Listing #112233", response.json['message'])
+            mock_delete.assert_called_once_with('tok', '112233')
+
+        item = self.db.get_item_by_sku("TEST", 7)
+        self.assertEqual(item['status'], 'SOLD')
+
+    def test_etsy_client_delete_listing_payload(self):
+        """Verify delete_listing sends DELETE request to Etsy OpenAPI."""
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+        with patch("tgnj_app.core.etsy_client.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.status = 204
+            mock_resp.read.return_value = b''
+            mock_resp.__enter__.return_value = mock_resp
+            mock_urlopen.return_value = mock_resp
+
+            res = client.delete_listing("fake_token", "112233")
+            self.assertTrue(res.get("success"))
+            
+            req = mock_urlopen.call_args[0][0]
+            self.assertEqual(req.get_method(), "DELETE")
+            self.assertIn("/v3/application/listings/112233", req.full_url)
+
+
+    def test_etsy_client_reactivate_listing_payload(self):
+        """Verify reactivate_listing sends PATCH state=active request."""
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+        with patch("tgnj_app.core.etsy_client.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = b'{"state": "active"}'
+            mock_resp.__enter__.return_value = mock_resp
+            mock_urlopen.return_value = mock_resp
+
+            res = client.reactivate_listing("fake_token", "12345")
+            self.assertEqual(res.get("state"), "active")
+            
+            req = mock_urlopen.call_args[0][0]
+            self.assertEqual(req.get_method(), "PATCH")
+            self.assertIn("/v3/application/shops/fake_shop/listings/12345", req.full_url)
+
+    def test_restore_item_auto_reactivates_etsy_listing(self):
+        """Verify restoreItem endpoint reactivates Etsy listing if item has listing_id."""
+        self.db.add_item("TEST", 6, "Sapphire", 4.0, 10, 8, 5)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'SOLD', sold_price = 200.0, etsy_listing_id = '554433' WHERE sku_group = 'TEST' AND sku_id = 6;"
+            )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db), \
+             patch('tgnj_app.gui.app.get_fresh_etsy_tokens', return_value=('key', 'sec', 'shop', 'tok', 'ref')), \
+             patch('tgnj_app.core.etsy_client.EtsyClient.reactivate_listing', return_value={'state': 'active'}) as mock_reactivate:
+            
+            response = self.client.post('/api/restoreItem/TEST/6')
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("reactivated Etsy Listing #554433", response.json['message'])
+            mock_reactivate.assert_called_once_with('tok', '554433')
+
+        item = self.db.get_item_by_sku("TEST", 6)
+        self.assertEqual(item['status'], 'LISTED_ETSY')
+        self.assertEqual(item['sold_price'], 0.0)
+
+    def test_deactivate_listing_http_error_handling(self):
+        """Verify deactivate_listing catches HTTP errors (401/404) gracefully."""
+        from urllib.error import HTTPError
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+        
+        # Test HTTP 401
+        err_401 = HTTPError("url", 401, "Unauthorized", {}, None)
+        with patch("tgnj_app.core.etsy_client.urlopen", side_effect=err_401):
+            res = client.deactivate_listing("fake_token", "12345")
+            self.assertIn("error", res)
+            self.assertEqual(res.get("code"), 401)
+
+        # Test HTTP 404
+        err_404 = HTTPError("url", 404, "Not Found", {}, None)
+        with patch("tgnj_app.core.etsy_client.urlopen", side_effect=err_404):
+            res = client.deactivate_listing("fake_token", "99999")
+            self.assertIn("error", res)
+            self.assertEqual(res.get("code"), 404)
+
+    def test_deactivate_listing_network_exception(self):
+        """Verify deactivate_listing catches network offline / socket timeout exceptions."""
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+        with patch("tgnj_app.core.etsy_client.urlopen", side_effect=Exception("Connection timed out")):
+            res = client.deactivate_listing("fake_token", "12345")
+            self.assertIn("error", res)
+            self.assertEqual(res.get("error"), "Connection timed out")
+
+    def test_reactivate_listing_http_error_handling(self):
+        """Verify reactivate_listing catches HTTP errors (401/404) gracefully."""
+        from urllib.error import HTTPError
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+        
+        err_401 = HTTPError("url", 401, "Unauthorized", {}, None)
+        with patch("tgnj_app.core.etsy_client.urlopen", side_effect=err_401):
+            res = client.reactivate_listing("fake_token", "12345")
+            self.assertIn("error", res)
+            self.assertEqual(res.get("code"), 401)
+
+    def test_reactivate_listing_network_exception(self):
+        """Verify reactivate_listing catches network timeout exceptions."""
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+        with patch("tgnj_app.core.etsy_client.urlopen", side_effect=Exception("Network unreachable")):
+            res = client.reactivate_listing("fake_token", "12345")
+            self.assertIn("error", res)
+            self.assertEqual(res.get("error"), "Network unreachable")
+
+    def test_mark_sold_non_existent_item_returns_404(self):
+        """Verify markSold returns 404 when item doesn't exist."""
+        with patch('tgnj_app.gui.app.db_instance', self.db):
+            response = self.client.post('/api/markSold/NONEXISTENT/999')
+            self.assertEqual(response.status_code, 404)
+            self.assertIn("Item not found", response.json['message'])
+
+    def test_mark_sold_succeeds_locally_even_if_etsy_api_fails(self):
+        """Verify markSold updates local database to SOLD even if Etsy API returns an error or fails."""
+        self.db.add_item("FAILTEST", 1, "Ruby", 3.0, 9, 7, 4)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = '887766' WHERE sku_group = 'FAILTEST' AND sku_id = 1;"
+            )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db), \
+             patch('tgnj_app.gui.app.get_fresh_etsy_tokens', return_value=('key', 'sec', 'shop', 'tok', 'ref')), \
+             patch('tgnj_app.core.etsy_client.EtsyClient.deactivate_listing', return_value={'error': 'HTTP 401 Unauthorized', 'code': 401}):
+            
+            response = self.client.post('/api/markSold/FAILTEST/1', json={'price': 80.0, 'channel': 'Offline'})
+            # Must STILL succeed locally!
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn("deactivated Etsy Listing", response.json['message'])
+
+        # Database is updated locally to SOLD
+        item = self.db.get_item_by_sku("FAILTEST", 1)
+        self.assertEqual(item['status'], 'SOLD')
+        self.assertEqual(item['sold_price'], 80.0)
+
+    def test_restore_item_non_existent_item_returns_404(self):
+        """Verify restoreItem returns 404 when item doesn't exist."""
+        with patch('tgnj_app.gui.app.db_instance', self.db):
+            response = self.client.post('/api/restoreItem/NONEXISTENT/999')
+            self.assertEqual(response.status_code, 404)
+
+    def test_restore_item_succeeds_locally_even_if_etsy_api_fails(self):
+        """Verify restoreItem updates local status even if Etsy reactivation API fails."""
+        self.db.add_item("FAILTEST", 2, "Garnet", 5.0, 11, 9, 6)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'SOLD', etsy_listing_id = '556677' WHERE sku_group = 'FAILTEST' AND sku_id = 2;"
+            )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db), \
+             patch('tgnj_app.gui.app.get_fresh_etsy_tokens', return_value=('key', 'sec', 'shop', 'tok', 'ref')), \
+             patch('tgnj_app.core.etsy_client.EtsyClient.reactivate_listing', return_value={'error': 'Connection timed out'}):
+            
+            response = self.client.post('/api/restoreItem/FAILTEST/2')
+            # Must STILL succeed locally!
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn("reactivated Etsy Listing", response.json['message'])
+
+        item = self.db.get_item_by_sku("FAILTEST", 2)
+        self.assertEqual(item['status'], 'LISTED_ETSY')
+        self.assertEqual(item['sold_price'], 0.0)
+
 if __name__ == "__main__":
     unittest.main()
+
+
+
 

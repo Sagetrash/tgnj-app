@@ -549,8 +549,18 @@ def markSold(sku_group: str, sku_id: int):
     channel = data.get('channel', 'Offline')
     from datetime import datetime, timezone
     now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+    etsy_listing_id = ""
+    item_status = ""
     with db_instance.conn as conn:
         curs = conn.cursor()
+        curs.execute("SELECT status, etsy_listing_id FROM inventory WHERE sku_group = ? AND sku_id = ?", (sku_group, sku_id))
+        row = curs.fetchone()
+        if row:
+            item_status = str(row['status'] or '').strip()
+            if row['etsy_listing_id']:
+                etsy_listing_id = str(row['etsy_listing_id']).strip()
+
         curs.execute("""
             UPDATE inventory 
             SET status = 'SOLD', 
@@ -569,31 +579,106 @@ def markSold(sku_group: str, sku_id: int):
                 'sold_at': now_str,
                 'updated_at': now_str
             })
-            return jsonify(message(f'Marked {sku_group}-{sku_id:03d} as SOLD')), 200
+
+            etsy_msg = ""
+            if etsy_listing_id:
+                try:
+                    from tgnj_app.core.etsy_client import EtsyClient
+                    api_key, shared_secret, shop_id, access_token, refresh_token = get_fresh_etsy_tokens()
+                    if api_key and access_token and shop_id:
+                        client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+                        if item_status == 'DRAFT_ETSY':
+                            res = client.update_listing_title(access_token, etsy_listing_id, "delete")
+                            action_name = "renamed Etsy Draft Listing to 'delete'"
+                        else:
+                            res = client.deactivate_listing(access_token, etsy_listing_id)
+                            action_name = "deactivated live Etsy Listing"
+
+                        if isinstance(res, dict) and ("invalid_token" in str(res.get("error", "")) or res.get("code") == 401):
+                            new_token = refresh_etsy_token_if_needed(client, refresh_token)
+                            if new_token:
+                                current_fn = client.update_listing_title if (item_status == 'DRAFT_ETSY' or "delete" in action_name) else client.deactivate_listing
+                                res = current_fn(new_token, etsy_listing_id)
+
+                        if isinstance(res, dict) and "state = draft" in str(res.get("error", "")):
+                            # Fallback: Listing is in draft state on Etsy -> rename title to 'delete'
+                            res = client.update_listing_title(access_token, etsy_listing_id, "delete")
+                            action_name = "renamed Etsy Draft Listing to 'delete'"
+
+                        if isinstance(res, dict) and "error" not in res:
+                            etsy_msg = f" & {action_name} #{etsy_listing_id}"
+                        else:
+                            print(f"[markSold] Could not perform Etsy action on #{etsy_listing_id}: {res.get('error') if isinstance(res, dict) else res}")
+
+
+                except Exception as ee:
+                    print(f"[markSold] Etsy action exception for #{etsy_listing_id}: {ee}")
+
+            return jsonify(message(f'Marked {sku_group}-{sku_id:03d} as SOLD{etsy_msg}')), 200
         else:
             return jsonify(message('Item not found')), 404
+
+
 
 @app.route('/api/restoreItem/<sku_group>/<int:sku_id>', methods=['POST'])
 def restoreItem(sku_group: str, sku_id: int):
     from datetime import datetime, timezone
     now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+    etsy_listing_id = ""
     with db_instance.conn as conn:
         curs = conn.cursor()
+        curs.execute("SELECT etsy_listing_id FROM inventory WHERE sku_group = ? AND sku_id = ?", (sku_group, sku_id))
+        row = curs.fetchone()
+        if row and row['etsy_listing_id']:
+            etsy_listing_id = str(row['etsy_listing_id']).strip()
+
+        new_status = 'LISTED_ETSY' if etsy_listing_id else 'IN_STOCK'
+
         curs.execute("""
             UPDATE inventory 
-            SET status = 'IN_STOCK', 
+            SET status = ?, 
+                sold_price = 0.0,
+                sold_channel = '',
+                sold_at = '',
                 updated_at = ? 
             WHERE sku_group = ? AND sku_id = ?;
-        """, (now_str, sku_group, sku_id))
+        """, (new_status, now_str, sku_group, sku_id))
         conn.commit()
         if curs.rowcount > 0:
             db_instance.enqueue_mutation(sku_group, sku_id, 'RESTORE_ITEM', {
-                'status': 'IN_STOCK',
+                'status': new_status,
+                'sold_price': 0.0,
+                'sold_channel': '',
+                'sold_at': '',
                 'updated_at': now_str
             })
-            return jsonify(message(f'Restored {sku_group}-{sku_id:03d} to IN_STOCK')), 200
+
+            etsy_msg = ""
+            if etsy_listing_id:
+                try:
+                    from tgnj_app.core.etsy_client import EtsyClient
+                    api_key, shared_secret, shop_id, access_token, refresh_token = get_fresh_etsy_tokens()
+                    if api_key and access_token and shop_id:
+                        client = EtsyClient(api_key=api_key, shared_secret=shared_secret, shop_id=shop_id)
+                        res = client.reactivate_listing(access_token, etsy_listing_id)
+                        if isinstance(res, dict) and ("invalid_token" in str(res.get("error", "")) or res.get("code") == 401):
+                            new_token = refresh_etsy_token_if_needed(client, refresh_token)
+                            if new_token:
+                                res = client.reactivate_listing(new_token, etsy_listing_id)
+
+                        if isinstance(res, dict) and "error" not in res:
+                            etsy_msg = f" & reactivated Etsy Listing #{etsy_listing_id}"
+                        else:
+                            print(f"[restoreItem] Could not reactivate Etsy listing #{etsy_listing_id}: {res.get('error') if isinstance(res, dict) else res}")
+                except Exception as ee:
+                    print(f"[restoreItem] Etsy reactivation exception for #{etsy_listing_id}: {ee}")
+
+            return jsonify(message(f'Restored {sku_group}-{sku_id:03d} to {new_status}{etsy_msg}')), 200
+
         else:
             return jsonify(message('Item not found')), 404
+
 
 @app.route('/api/etsy/pushListing/<sku_group>/<int:sku_id>', methods=['POST'])
 def pushListing(sku_group: str, sku_id: int):
