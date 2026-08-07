@@ -494,9 +494,8 @@ def etsySyncOrders():
                                 'sold_channel': 'Etsy', 'sold_at': now_str, 'updated_at': now_str
                             })
 
-        # Engine 2: Safety net - Fetch listings with state 'sold_out'
-        sold_out_data = client.get_shop_listings_by_state(access_token, state='sold_out', limit=100)
-        sold_out_listings = sold_out_data.get('results', [])
+        # Engine 2: Safety net - Fetch listings with state 'sold_out' across all pages
+        sold_out_listings = client.get_all_shop_listings_by_state(access_token, state='sold_out')
         
         with db_instance.conn as conn:
             curs = conn.cursor()
@@ -504,7 +503,8 @@ def etsySyncOrders():
             now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
             for listing in sold_out_listings:
                 listing_id = str(listing.get('listing_id', ''))
-                sku = listing.get('sku', '').strip().upper()
+                skus_list = listing.get('skus', []) or []
+                sku = (skus_list[0] if skus_list else (listing.get('sku') or '')).strip().upper()
                 price_amount = float(listing.get('price', {}).get('amount', 0) / listing.get('price', {}).get('divisor', 100)) if isinstance(listing.get('price'), dict) else float(listing.get('price') or 0.0)
 
                 if sku and '-' in sku:
@@ -650,21 +650,20 @@ def pushListing(sku_group: str, sku_id: int):
 
 def sync_deleted_etsy_drafts(client, access_token):
     """
-    Cross-checks local database listings against live Etsy active & draft listings.
+    Cross-checks local database listings against live Etsy active & draft listings across all pages.
     If a draft/listing was deleted from Etsy.com, resets local item back to IN_STOCK
     and enqueues a RESET_ETSY_DRAFT mutation for Turso.
     """
     reset_count = 0
     try:
-        active_resp = client.get_shop_listings_by_state(access_token, state='active', limit=100)
-        draft_resp = client.get_shop_listings_by_state(access_token, state='draft', limit=100)
-        inactive_resp = client.get_shop_listings_by_state(access_token, state='inactive', limit=100)
+        active_listings = client.get_all_shop_listings_by_state(access_token, state='active')
+        draft_listings = client.get_all_shop_listings_by_state(access_token, state='draft')
+        inactive_listings = client.get_all_shop_listings_by_state(access_token, state='inactive')
 
         # Connection Safety Guard: If API call failed or returned errors, DO NOT reset anything
         live_ids = set()
-        for resp in [active_resp, draft_resp, inactive_resp]:
-            results = resp.get('results', []) if isinstance(resp, dict) else []
-            for lst in results:
+        for listings_group in [active_listings, draft_listings, inactive_listings]:
+            for lst in listings_group:
                 if lst.get('listing_id'):
                     live_ids.add(str(lst.get('listing_id')))
 
@@ -738,13 +737,13 @@ def etsyLiveStats():
         # Cross-check and reset deleted drafts (guarded by Etsy connection safety check)
         reset_count = sync_deleted_etsy_drafts(client, access_token)
 
-        active_resp = client.get_shop_listings_by_state(access_token, state='active')
-        draft_resp = client.get_shop_listings_by_state(access_token, state='draft')
+        active_all = client.get_all_shop_listings_by_state(access_token, state='active')
+        draft_all = client.get_all_shop_listings_by_state(access_token, state='draft')
         
         return jsonify({
             'connected': True,
-            'active': active_resp.get('count', len(active_resp.get('results', []))),
-            'draft': draft_resp.get('count', len(draft_resp.get('results', []))),
+            'active': len(active_all),
+            'draft': len(draft_all),
             'reset_drafts': reset_count
         }), 200
     except Exception as e:

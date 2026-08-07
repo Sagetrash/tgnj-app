@@ -231,5 +231,25 @@ class TestTgnjApp(unittest.TestCase):
         self.assertEqual(item['status'], 'LISTED_ETSY')
         self.assertEqual(item['etsy_listing_id'], '77777')
 
+    def test_etsy_client_get_all_shop_listings_by_state_pagination(self):
+        """Verify get_all_shop_listings_by_state paginates until all items across pages are returned."""
+        client = EtsyClient("fake_key", "fake_secret", "fake_shop")
+
+        def mock_get_listings(access_token, state="active", limit=100, offset=0):
+            if offset == 0:
+                # Page 1 returns 100 items
+                return {"count": 125, "results": [{"listing_id": i} for i in range(100)]}
+            elif offset == 100:
+                # Page 2 returns remaining 25 items
+                return {"count": 125, "results": [{"listing_id": i} for i in range(100, 125)]}
+            return {"count": 125, "results": []}
+
+        with patch.object(client, "get_shop_listings_by_state", side_effect=mock_get_listings):
+            all_items = client.get_all_shop_listings_by_state("fake_token", state="draft")
+            self.assertEqual(len(all_items), 125)
+            self.assertEqual(all_items[0]["listing_id"], 0)
+            self.assertEqual(all_items[124]["listing_id"], 124)
+
 if __name__ == "__main__":
     unittest.main()
+
