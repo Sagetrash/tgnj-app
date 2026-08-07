@@ -148,4 +148,27 @@ uv run python -m unittest discover tests
 3. **Zero External Dependencies for HTTP:** Keep `turso_client.py` and `etsy_client.py` using Python standard library `urllib.request` / `urllib.error` to maintain low binary footprint.
 4. **Preserve Clickable File Links:** When reporting work or outputting markdown, always format clickable file links using standard markdown `[filename](file:///path/to/file)` without nested backticks.
 5. **Use TEST SKU Group for Integration Testing:** When performing live API or database integration testing, ALWAYS use the dedicated `TEST` SKU group (`sku_group = 'TEST'`) to ensure production gemstone inventory is never altered or polluted.
+6. **Enforce Proper Git Standards:** Follow conventional commit standards (`feat:`, `fix:`, `test:`, `docs:`), perform changes on dedicated feature branches, and run pre-commit test verification before creating commits.
+
+---
+
+## 7. Git Workflow & Version Control Guidelines
+
+### A. Branch Management
+- **Feature Branches:** Perform development and refactoring on dedicated feature branches (e.g., `feature/ebay-integration`, `fix/sync-watermark`) rather than committing directly to `main`.
+- **Branch Naming:** Use concise, lower-case, hyphen-separated branch names prefixed with `feature/`, `fix/`, `docs/`, or `refactor/`.
+
+### B. Commit Standards & Conventional Commits
+- **Conventional Commit Prefixes:**
+  - `feat:` New feature or capability additions.
+  - `fix:` Bug fixes, error handling, or schema corrections.
+  - `test:` Unit test additions or test suite updates.
+  - `docs:` Documentation or `AGENTS.md` context guide updates.
+  - `refactor:` Code restructuring without functional changes.
+- **Atomic Scope:** Keep commits focused and atomic. Group related code modifications, corresponding unit tests, and documentation into a single logical commit.
+
+### C. Pre-Commit Verification Rules
+1. **Never Commit Broken Code:** Always execute unit test suite (`uv run python -m unittest discover tests`) and verify all tests pass prior to staging or committing.
+2. **Audit Staged Files:** Run `git status` and `git diff` to verify that temporary data files, test databases (`inventory.db`), API credentials, or scratch scripts are not staged.
+
 
