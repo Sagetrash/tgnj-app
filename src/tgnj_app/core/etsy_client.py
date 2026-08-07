@@ -442,9 +442,9 @@ class EtsyClient:
             print(f"[etsy_client] get_shop_receipt_transactions exception: {e}")
             return {"count": 0, "results": []}
 
-    def get_shop_listings_by_state(self, access_token: str, state: str = "active", limit: int = 100) -> dict:
+    def get_shop_listings_by_state(self, access_token: str, state: str = "active", limit: int = 100, offset: int = 0) -> dict:
         """Fetch live shop listings directly from Etsy by state ('active', 'draft', 'inactive', 'sold_out')."""
-        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings?state={state}&limit={limit}"
+        url = f"{ETSY_API_BASE}/shops/{self.shop_id}/listings?state={state}&limit={limit}&offset={offset}"
         headers = {
             "x-api-key": self.api_key_header,
             "Authorization": f"Bearer {access_token}"
@@ -460,3 +460,21 @@ class EtsyClient:
         except Exception as e:
             print(f"[etsy_client] get_shop_listings_by_state exception: {e}")
             return {"count": 0, "results": []}
+
+    def get_all_shop_listings_by_state(self, access_token: str, state: str = "active") -> list[dict]:
+        """Fetch ALL shop listings for a given state across all pages via offset pagination."""
+        all_results = []
+        offset = 0
+        limit = 100
+        page_count = 0
+        while True:
+            page_count += 1
+            res = self.get_shop_listings_by_state(access_token, state=state, limit=limit, offset=offset)
+            results = res.get("results", [])
+            all_results.extend(results)
+            if len(results) < limit:
+                break
+            offset += limit
+        print(f"[etsy_client] Fetched total {len(all_results)} '{state}' listing(s) across {page_count} page(s).")
+        return all_results
+
