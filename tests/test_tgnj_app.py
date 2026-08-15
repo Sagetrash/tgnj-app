@@ -281,7 +281,7 @@ class TestTgnjApp(unittest.TestCase):
             
             response = self.client.post('/api/markSold/TEST/5', json={'price': 150.0, 'channel': 'Instagram'})
             self.assertEqual(response.status_code, 200)
-            self.assertIn("deactivated Etsy Listing #998877", response.json['message'])
+            self.assertIn("deactivated live Etsy Listing #998877", response.json['message'])
             mock_deactivate.assert_called_once_with('tok', '998877')
 
         # Item status updated to SOLD in database
@@ -298,12 +298,12 @@ class TestTgnjApp(unittest.TestCase):
 
         with patch('tgnj_app.gui.app.db_instance', self.db), \
              patch('tgnj_app.gui.app.get_fresh_etsy_tokens', return_value=('key', 'sec', 'shop', 'tok', 'ref')), \
-             patch('tgnj_app.core.etsy_client.EtsyClient.delete_listing', return_value={'success': True}) as mock_delete:
+             patch('tgnj_app.core.etsy_client.EtsyClient.update_listing_title', return_value={'title': 'delete'}) as mock_update:
             
             response = self.client.post('/api/markSold/TEST/7', json={'price': 40.0, 'channel': 'Offline'})
             self.assertEqual(response.status_code, 200)
-            self.assertIn("deleted Etsy Draft Listing #112233", response.json['message'])
-            mock_delete.assert_called_once_with('tok', '112233')
+            self.assertIn("renamed Etsy Draft Listing to 'delete' #112233", response.json['message'])
+            mock_update.assert_called_once_with('tok', '112233', 'delete')
 
         item = self.db.get_item_by_sku("TEST", 7)
         self.assertEqual(item['status'], 'SOLD')
@@ -412,7 +412,7 @@ class TestTgnjApp(unittest.TestCase):
     def test_mark_sold_non_existent_item_returns_404(self):
         """Verify markSold returns 404 when item doesn't exist."""
         with patch('tgnj_app.gui.app.db_instance', self.db):
-            response = self.client.post('/api/markSold/NONEXISTENT/999')
+            response = self.client.post('/api/markSold/NONEXISTENT/999', json={})
             self.assertEqual(response.status_code, 404)
             self.assertIn("Item not found", response.json['message'])
 
