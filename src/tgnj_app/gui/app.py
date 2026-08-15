@@ -544,7 +544,7 @@ def etsySyncOrders():
 
 @app.route('/api/markSold/<sku_group>/<int:sku_id>', methods=['POST'])
 def markSold(sku_group: str, sku_id: int):
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     price = data.get('price', 0.0)
     channel = data.get('channel', 'Offline')
     from datetime import datetime, timezone
