@@ -542,6 +542,207 @@ def etsySyncOrders():
         print(f"[app] etsySyncOrders exception: {e}")
         return jsonify(message(f'Etsy Sync Orders Exception: {e}')), 500
 
+@app.route('/api/ebay/sync_sales', methods=['POST'])
+def sync_ebay_sales():
+    """
+    Deterministically syncs eBay sales from an Orders/Sales CSV report.
+    Accepts:
+      - Multipart file upload: request.files['file']
+      - Raw CSV text in JSON: request.json['csv_content']
+      - Server file path in JSON: request.json['file_path']
+    Optional parameters:
+      - dry_run: bool (default False) - Preview stats without mutating database
+    """
+    try:
+        import csv, io, re
+        from datetime import datetime, timezone
+
+        raw_csv_text = None
+        dry_run = False
+
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+            dry_run = bool(data.get('dry_run', False))
+            if 'csv_content' in data and data['csv_content']:
+                raw_csv_text = data['csv_content']
+            elif 'file_path' in data and data['file_path']:
+                f_path = Path(data['file_path'])
+                if not f_path.exists():
+                    return jsonify(message(f"File not found: {data['file_path']}")), 400
+                with open(f_path, 'r', encoding='utf-8-sig', errors='replace') as f:
+                    raw_csv_text = f.read()
+        else:
+            dry_run = request.form.get('dry_run', 'false').lower() in ('true', '1', 'yes')
+            if 'file' in request.files:
+                uploaded_file = request.files['file']
+                raw_csv_text = uploaded_file.read().decode('utf-8-sig', errors='replace')
+
+        if not raw_csv_text:
+            return jsonify(message("No CSV content provided. Provide 'file', 'csv_content', or 'file_path'.")), 400
+
+        lines = raw_csv_text.splitlines()
+        header_idx = -1
+        for i, line in enumerate(lines[:15]):
+            if 'Custom Label' in line and 'Sales Record Number' in line:
+                header_idx = i
+                break
+
+        if header_idx == -1:
+            return jsonify(message("Invalid eBay Orders CSV format. Missing 'Custom Label' and 'Sales Record Number' headers.")), 400
+
+        reader = csv.DictReader(lines[header_idx:])
+        
+        now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        
+        total_rows = 0
+        updated_count = 0
+        total_sales_amount = 0.0
+        already_sold_count = 0
+        etsy_delist_alerts = []
+        unmatched_skus = []
+        invalid_skus = []
+        ready_items = []
+
+        with db_instance.conn as conn:
+            curs = conn.cursor()
+            for row in reader:
+                record_num = (row.get('Sales Record Number') or '').strip()
+                custom_label = (row.get('Custom Label') or '').strip()
+                item_title = (row.get('Item Title') or '').strip()
+                order_num = (row.get('Order Number') or '').strip()
+                item_num = (row.get('Item Number') or '').strip()
+                sold_for_raw = (row.get('Sold For') or '').strip()
+                sale_date = (row.get('Sale Date') or '').strip()
+
+                if not record_num and not custom_label and not item_title:
+                    continue
+
+                total_rows += 1
+
+                # Clean price
+                cleaned_price = re.sub(r'[^\d.]', '', str(sold_for_raw))
+                try:
+                    price_val = float(cleaned_price) if cleaned_price else 0.0
+                except ValueError:
+                    price_val = 0.0
+
+                # Match SKU: group and ID
+                sku_match = re.match(r'^([A-Za-z0-9]+)[-_ ]+(\d+)$', custom_label.upper()) if custom_label else None
+                if not sku_match:
+                    invalid_skus.append({
+                        'custom_label': custom_label,
+                        'order_num': order_num,
+                        'item_num': item_num,
+                        'title': item_title,
+                        'sold_price': price_val,
+                        'sale_date': sale_date
+                    })
+                    continue
+
+                sku_group = sku_match.group(1)
+                sku_id = int(sku_match.group(2))
+
+                curs.execute(
+                    "SELECT sku_group, sku_id, shape, weight, status, sold_price, sold_channel, sold_at, etsy_listing_id "
+                    "FROM inventory WHERE sku_group = ? AND sku_id = ? AND is_deleted = 0",
+                    (sku_group, sku_id)
+                )
+                item = curs.fetchone()
+
+                if not item:
+                    unmatched_skus.append({
+                        'sku': f"{sku_group}-{sku_id:03d}",
+                        'raw_sku': custom_label,
+                        'order_num': order_num,
+                        'item_num': item_num,
+                        'title': item_title,
+                        'sold_price': price_val,
+                        'sale_date': sale_date
+                    })
+                    continue
+
+                db_status = str(item['status'] or '').upper().strip()
+                etsy_id = str(item['etsy_listing_id'] or '').strip()
+
+                if db_status == 'SOLD':
+                    already_sold_count += 1
+                    continue
+
+                # Alert if active on Etsy
+                if etsy_id or db_status == 'LISTED_ETSY':
+                    etsy_delist_alerts.append({
+                        'sku': f"{sku_group}-{sku_id:03d}",
+                        'etsy_listing_id': etsy_id,
+                        'shape': item['shape'],
+                        'weight': item['weight'],
+                        'ebay_sold_price': price_val,
+                        'sale_date': sale_date,
+                        'ebay_order_num': order_num,
+                        'ebay_item_num': item_num
+                    })
+
+                ready_items.append({
+                    'sku_group': sku_group,
+                    'sku_id': sku_id,
+                    'price': price_val,
+                    'sale_date': sale_date or now_str,
+                    'order_num': order_num,
+                    'item_num': item_num
+                })
+
+            # If not a dry run, commit updates and enqueue mutations
+            if not dry_run:
+                for it in ready_items:
+                    grp = it['sku_group']
+                    sid = it['sku_id']
+                    p = it['price']
+                    sdate = it['sale_date']
+
+                    curs.execute("""
+                        UPDATE inventory 
+                        SET status = 'SOLD', 
+                            sold_price = ?, 
+                            sold_channel = 'eBay', 
+                            sold_at = ?, 
+                            updated_at = ? 
+                        WHERE sku_group = ? AND sku_id = ? AND (status IS NULL OR status != 'SOLD');
+                    """, (p, sdate, now_str, grp, sid))
+
+                    if curs.rowcount > 0:
+                        updated_count += curs.rowcount
+                        total_sales_amount += p
+                        db_instance.enqueue_mutation(grp, sid, 'MARK_SOLD', {
+                            'status': 'SOLD',
+                            'sold_price': p,
+                            'sold_channel': 'eBay',
+                            'sold_at': sdate,
+                            'updated_at': now_str
+                        })
+            else:
+                updated_count = len(ready_items)
+                total_sales_amount = sum(it['price'] for it in ready_items)
+
+        return jsonify({
+            'status': 'success',
+            'dry_run': dry_run,
+            'summary': {
+                'total_rows_processed': total_rows,
+                'updated_sold_count': updated_count,
+                'total_sales_amount': round(total_sales_amount, 2),
+                'already_sold_skipped': already_sold_count,
+                'etsy_delist_alerts_count': len(etsy_delist_alerts),
+                'unmatched_sku_count': len(unmatched_skus),
+                'invalid_sku_count': len(invalid_skus)
+            },
+            'etsy_delist_alerts': etsy_delist_alerts,
+            'unmatched_sample': unmatched_skus[:10],
+            'invalid_sku_sample': invalid_skus[:10]
+        }), 200
+
+    except Exception as e:
+        print(f"[app] sync_ebay_sales exception: {e}")
+        return jsonify(message(f'eBay Sync Sales Exception: {e}')), 500
+
 @app.route('/api/markSold/<sku_group>/<int:sku_id>', methods=['POST'])
 def markSold(sku_group: str, sku_id: int):
     data = request.get_json(silent=True) or {}
