@@ -352,7 +352,8 @@ def apiEbayAnalyzeReport():
         return jsonify({'success': False, 'error': 'Empty filename'}), 400
         
     filename = file.filename.lower()
-    temp_dir = Path.home() / '.gemini' / 'antigravity' / 'scratch'
+    import tempfile
+    temp_dir = Path(tempfile.gettempdir())
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_path = temp_dir / file.filename
     file.save(temp_path)
