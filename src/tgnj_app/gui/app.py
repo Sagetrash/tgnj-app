@@ -440,6 +440,52 @@ def apiEbayExportActionEnd():
         download_name='Action_End.csv'
     )
 
+@app.route('/api/ebay/export-creation-csv', methods=['POST'])
+def apiEbayExportCreationCSV():
+    data = request.json or {}
+    sku_group = data.get('sku_group', '').upper()
+    gemstone_name = data.get('gemstone_name', 'Black Rutile Quartz')
+    try:
+        start_price = float(data.get('start_price', 9.99))
+    except Exception:
+        start_price = 9.99
+    schedule_start_time = data.get('schedule_start_time', '')
+    is_pair = bool(data.get('is_pair', False))
+    
+    if not sku_group:
+        return jsonify({'success': False, 'error': 'Missing sku_group'}), 400
+        
+    with db_instance.conn as conn:
+        curs = conn.cursor()
+        curs.execute("""
+            SELECT sku_group, sku_id, shape, weight, length, width, depth 
+            FROM inventory 
+            WHERE sku_group = ? AND is_deleted = 0 
+            ORDER BY sku_id ASC;
+        """, (sku_group,))
+        rows = curs.fetchall()
+        
+    if not rows:
+        return jsonify({'success': False, 'error': f'No active items found in SKU group {sku_group}'}), 404
+        
+    items = [dict(r) for r in rows]
+    csv_content = ebay_refresh.generate_ebay_creation_csv(
+        items=items,
+        gemstone_name=gemstone_name,
+        start_price=start_price,
+        schedule_start_time=schedule_start_time,
+        is_pair=is_pair
+    )
+    
+    mem_file = io.BytesIO(csv_content.encode('utf-8'))
+    filename = f"eBay_Creation_Template_{sku_group}.csv"
+    return send_file(
+        mem_file,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename
+    )
+
 @app.route('/etsy')
 def etsyManagerPage():
     return render_template('etsy_manager.html')

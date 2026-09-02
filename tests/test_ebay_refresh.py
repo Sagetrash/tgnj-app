@@ -81,5 +81,32 @@ class TestEbayRefresh(unittest.TestCase):
         self.assertIn(b'Action,Item number,EndCode', res.data)
         self.assertIn(b'End,112233445566,NotAvailable', res.data)
 
+    def test_generate_ebay_creation_csv(self):
+        from tgnj_app.core.ebay_refresh import generate_ebay_creation_csv
+        sample_items = [
+            {"sku_group": "J9", "sku_id": 1, "shape": "Oval", "weight": 45.5, "length": 34, "width": 22, "depth": 6},
+            {"sku_group": "J9", "sku_id": 2, "shape": "Pear", "weight": 28.8, "length": 29, "width": 12, "depth": 4}
+        ]
+        csv_out = generate_ebay_creation_csv(
+            items=sample_items,
+            gemstone_name="Black Rutile Quartz",
+            start_price=9.99,
+            schedule_start_time="2026-09-03T20:00:00+05:30",
+            is_pair=False
+        )
+        self.assertIn("#INFO,Version=1.0,,Template=fx_category_template_EBAY_US", csv_out)
+        self.assertIn("*Action(SiteID=US|Country=IN|Currency=USD|Version=1193)", csv_out)
+        self.assertIn("J9-001", csv_out)
+        self.assertIn("45.5 Ct. Natural Black Rutile Quartz Oval Cabochon Loose Gemstone 34x22x6 mm", csv_out)
+        self.assertIn("https://tgnj-pictures.s3.us-east-1.amazonaws.com/J9/J9-001A.jpg", csv_out)
+
+    def test_flask_ebay_export_creation_route(self):
+        from tgnj_app.gui.app import app
+        client = app.test_client()
+        
+        # Test creation export endpoint with invalid group (should 404)
+        res = client.post('/api/ebay/export-creation-csv', json={'sku_group': 'NON_EXISTENT_GROUP'})
+        self.assertEqual(res.status_code, 404)
+
 if __name__ == "__main__":
     unittest.main()

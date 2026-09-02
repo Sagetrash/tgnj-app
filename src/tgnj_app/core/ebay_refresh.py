@@ -348,3 +348,160 @@ def generate_action_end_csv(stale_items: List[Dict[str, Any]], end_code: str = "
             writer.writerow(["End", item_id, end_code])
             
     return output.getvalue()
+
+
+def generate_ebay_creation_csv(
+    items: List[Dict[str, Any]],
+    gemstone_name: str = "Black Rutile Quartz",
+    start_price: float = 9.99,
+    schedule_start_time: str = "",
+    is_pair: bool = False
+) -> str:
+    """
+    Generates official eBay Bulk Listing Creation CSV matching fx_category_template_EBAY_US schema.
+    Includes 3 #INFO metadata headers, mandatory *Action header, 1-minute staggered scheduling,
+    and <= 80 character title length validation guard.
+    """
+    from datetime import datetime, timedelta
+    
+    output = io.StringIO()
+    
+    # 1. Output #INFO Metadata Header Directives
+    output.write("#INFO,Created=1752227834293,,,,,,,Indicates missing field that will be required soon,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n")
+    output.write("#INFO,Version=1.0,,Template=fx_category_template_EBAY_US,,,,,Indicates field does not apply to this item/category,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n")
+    output.write("#INFO,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n")
+    
+    writer = csv.writer(output)
+    
+    # 2. Main Header Row
+    headers = [
+        "*Action(SiteID=US|Country=IN|Currency=USD|Version=1193)",
+        "Custom label (SKU)",
+        "Category ID",
+        "Category name",
+        "Title",
+        "Schedule Time",
+        "Start price",
+        "Quantity ",
+        "Item photo URL",
+        "VideoID",
+        "Condition ID",
+        "Description",
+        "Format",
+        "Duration",
+        "Buy It Now price",
+        "Best Offer Enabled",
+        "Location",
+        "Shipping profile name",
+        "Return profile name",
+        "Payment profile name",
+        "C:Gemstone Type",
+        "C:Gemstone Shape",
+        "C:Item Length",
+        "C:Item Width",
+        "C:Item Depth",
+        "C:Item Weight",
+        "C:Gemstone Color",
+        "C:Gemstone Creation",
+        "C:Gemstone Form",
+        "C:Country of Origin",
+        "C:Country/Region of Manufacture",
+        "C:Gemstone Treatment",
+        "C:Certification",
+        "C:Brand",
+        "C:Cut Grade",
+        "C:Gemstone Clarity Grade",
+        "Gemstone name",
+        "C:Transparency",
+        "C:Wholesale = Yes, Private Message us",
+        "C:Drillable = Free Drilling"
+    ]
+    writer.writerow(headers)
+    
+    # Handle schedule start time
+    if schedule_start_time:
+        try:
+            base_dt = datetime.fromisoformat(schedule_start_time.replace('Z', '+00:00'))
+        except Exception:
+            base_dt = datetime.now()
+    else:
+        base_dt = datetime.now()
+        
+    description_html = '<a href="https://www.ebay.com/str/thegemsnjewels" target="_blank" style="text-align: center;"><h3><font color="#873d92">Thegemsnjewels</font></h3></a><h3 style="text-align: center;"><font color="#873d92">Shipping Policy</font></h3><h4 style="text-align: center;"><strong><font color="#873d92">US Shipping</font></strong></h4><ul><li><font color="#873d92"><strong>Cost</strong>: Free Shipping</font></li><li><font color="#873d92"><strong>Delivery Time</strong>: Generally within 15-20 days after shipping</font></li></ul><h4 style="text-align: center;"><strong><font color="#873d92">International Shipping</font></strong></h4><ul><li><font color="#873d92"><strong>Cost</strong>: Free Shipping</font></li><li><font color="#873d92"><strong>Delivery Time</strong>: Generally within 15-20 days worldwide</font></li></ul><h3 style="text-align: center;"><font color="#873d92">Return Policy</font></h3><p><font color="#873d92">Your satisfaction is our top priority. Returns accepted within 30 days.</font></p>'
+
+    pair_str = "Pair " if is_pair else ""
+
+    for idx, item in enumerate(items):
+        group = (item.get("sku_group") or "").upper()
+        sku_id = int(item.get("sku_id") or 0)
+        sku_str = f"{group}-{sku_id:03d}"
+        
+        shape = (item.get("shape") or "Cabochon").strip().title()
+        weight = float(item.get("weight") or 0.0)
+        length = int(item.get("length") or 0)
+        width = int(item.get("width") or 0)
+        depth = int(item.get("depth") or 0)
+        
+        # Build Title with exact formula:
+        # {weight} Ct Natural {gem_name} {shape} Cabochon Loose Gemstone Pair {L}x{W}x{D} mm
+        wt_str = f"{weight:.2f}".rstrip('0').rstrip('.')
+        title = f"{wt_str} Ct. Natural {gemstone_name} {shape} Cabochon Loose Gemstone {pair_str}{length}x{width}x{depth} mm"
+        
+        # Enforce eBay <= 80 character Title limit
+        if len(title) > 80:
+            title = title[:80].strip()
+            
+        # Stagger publication time by 1 minute per row
+        sched_dt = base_dt + timedelta(minutes=idx)
+        sched_str = sched_dt.strftime('%Y-%m-%dT%H:%M:%00+05:30')
+        
+        photo_a = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}A.jpg"
+        photo_b = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}B.jpg"
+        photos = f"{photo_a} | {photo_b}"
+        
+        row = [
+            "Add",
+            sku_str,
+            "262027",
+            "/Jewelry & Watches/Loose Diamonds & Gemstones/Loose Gemstones",
+            title,
+            sched_str,
+            f"{start_price:.2f}",
+            "1",
+            photos,
+            "",
+            "1500-New without tags",
+            description_html,
+            "FixedPrice",
+            "GTC",
+            "",
+            "1",
+            "302017",
+            "Shipping",
+            "Return - (ID: 136228479010)",
+            "Payment - (ID: 232882248010)",
+            gemstone_name,
+            shape,
+            f"{length} mm" if length > 0 else "",
+            f"{width} mm" if width > 0 else "",
+            f"{depth} mm" if depth > 0 else "",
+            f"{weight:.2f} Ct." if weight > 0 else "",
+            "",
+            "Natural",
+            "Polished",
+            "India",
+            "India",
+            "Not Enhanced",
+            "",
+            "Unbranded",
+            "Excellent",
+            "Eye Clean",
+            gemstone_name,
+            "Transparent",
+            "",
+            ""
+        ]
+        writer.writerow(row)
+        
+    return output.getvalue()
+
