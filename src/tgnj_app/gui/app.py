@@ -12,6 +12,7 @@ import threading
 import time
 from tgnj_app.core.turso_client import TursoClient
 from tgnj_app.core import sync as sync_engine
+from tgnj_app.core import ebay_refresh
 
 
 def get_bundle_path(rel_path):
@@ -337,6 +338,102 @@ def getSyncStatus():
         'last_push': last_push,
         'last_pull': last_pull,
     }), 200
+
+@app.route('/ebay')
+def ebayManagerPage():
+    return render_template('ebay_manager.html')
+
+@app.route('/api/ebay/analyze-report', methods=['POST'])
+def apiEbayAnalyzeReport():
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    file = request.files['file']
+    if not file or not file.filename:
+        return jsonify({'success': False, 'error': 'Empty filename'}), 400
+        
+    filename = file.filename.lower()
+    temp_dir = Path.home() / '.gemini' / 'antigravity' / 'scratch'
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / file.filename
+    file.save(temp_path)
+    
+    try:
+        if filename.endswith('.xlsx'):
+            listings = ebay_refresh.parse_quality_report_xlsx(str(temp_path))
+        else:
+            content = temp_path.read_text(encoding='utf-8', errors='ignore')
+            listings = ebay_refresh.parse_active_listings_csv(content)
+            
+        ranked_groups = ebay_refresh.analyze_sku_groups(listings)
+        return jsonify({
+            'success': True,
+            'total_listings': len(listings),
+            'ranked_groups': ranked_groups,
+            'listings': listings
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+
+@app.route('/api/ebay/auto-detect-report', methods=['POST'])
+def apiEbayAutoDetectReport():
+    downloads = Path.home() / 'Downloads'
+    candidates = list(downloads.glob('Listing quality report*.xlsx')) + list(downloads.glob('eBay-all-active-listings*.csv'))
+    if not candidates:
+        return jsonify({'success': False, 'error': 'No report found in Downloads directory'}), 404
+        
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    target = candidates[0]
+    
+    try:
+        if target.name.endswith('.xlsx'):
+            listings = ebay_refresh.parse_quality_report_xlsx(str(target))
+        else:
+            content = target.read_text(encoding='utf-8', errors='ignore')
+            listings = ebay_refresh.parse_active_listings_csv(content)
+            
+        ranked_groups = ebay_refresh.analyze_sku_groups(listings)
+        return jsonify({
+            'success': True,
+            'filename': target.name,
+            'total_listings': len(listings),
+            'ranked_groups': ranked_groups,
+            'listings': listings
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ebay/triage-group', methods=['POST'])
+def apiEbayTriageGroup():
+    data = request.json or {}
+    group_prefix = data.get('sku_group', '')
+    listings = data.get('listings', [])
+    if not group_prefix:
+        return jsonify({'success': False, 'error': 'Missing sku_group'}), 400
+        
+    triage = ebay_refresh.triage_sku_group(listings, group_prefix)
+    return jsonify({'success': True, 'sku_group': group_prefix, 'triage': triage}), 200
+
+@app.route('/api/ebay/export-action-end', methods=['POST'])
+def apiEbayExportActionEnd():
+    data = request.json or {}
+    stale_items = data.get('stale_items', [])
+    if not stale_items:
+        return jsonify({'success': False, 'error': 'No stale items provided'}), 400
+        
+    csv_content = ebay_refresh.generate_action_end_csv(stale_items)
+    mem_file = io.BytesIO(csv_content.encode('utf-8'))
+    return send_file(
+        mem_file,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='Action_End.csv'
+    )
 
 @app.route('/etsy')
 def etsyManagerPage():

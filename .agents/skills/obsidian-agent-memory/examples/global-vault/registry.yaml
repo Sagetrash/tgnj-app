@@ -1,0 +1,17 @@
+version: 1
+updated: 2026-08-07
+notes:
+  - name: obsidian-for-agents
+    type: project
+    path: "10 Projects/obsidian-for-agents.md"
+    summary: Obsidian Agent Memory Skill protocol; agent-agnostic vault memory.
+    vault_path: /mnt/Driver_E/My Files/projects/obsidian-for-agents/.brain
+    repo: https://github.com/Sagetrash/second-brain-skill
+    health: healthy
+    status: active
+    updated: 2026-08-07
+  - name: Global Coding Style
+    type: preference
+    path: "20 Preferences/coding-style.md"
+    summary: User global coding guidelines: TypeScript strict mode, clean commits, zero-dep scripts.
+    updated: 2026-08-07

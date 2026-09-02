@@ -1,0 +1,17 @@
+version: 1
+updated: "{{date}}"
+notes:
+  - name: Project State
+    path: "project-state.md"
+    type: project
+    status: active
+    tags: [project/state]
+    summary: Active project status, health indicators, and active focus.
+    updated: "{{date}}"
+  - name: System Architecture
+    path: "architecture.md"
+    type: architecture
+    status: active
+    tags: [architecture]
+    summary: Core system architecture diagram and component interaction model.
+    updated: "{{date}}"

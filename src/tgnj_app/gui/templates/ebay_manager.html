@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>eBay Operations Hub - TakshGems</title>
+    <link rel="stylesheet" href="{{url_for('static',filename='style.css')}}" />
+    <link
+      rel="icon"
+      href="{{ url_for('static', filename='logo.ico') }}"
+      type="image/x-icon"
+    />
+  </head>
+  <body>
+    <header>
+      <div class="header-brand">
+        <h1>TakshGems eBay Operations Hub</h1>
+      </div>
+      
+      <div class="header-actions">
+        <button type="button" class="hdr-btn" onclick="window.location.href='/'">Back to Inventory</button>
+        <button type="button" class="hdr-btn etsy-hdr-btn" onclick="window.location.href='/etsy'">Etsy Operations</button>
+        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">Settings</button>
+      </div>
+    </header>
+
+    <div class="etsy-hub-container">
+      <!-- Section 1: File Upload & Report Inspector -->
+      <div class="etsy-card">
+        <div class="card-header">
+          <h2>1. Load eBay Performance & Active Listings Report</h2>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Upload your <strong>Listing Quality Report (.xlsx)</strong> or <strong>Active Listings Report (.csv)</strong> from eBay Seller Hub to automatically analyze store staleness and rank SKU groups by refresh urgency.</p>
+          
+          <div style="display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap;">
+            <input type="file" id="report-file-input" accept=".xlsx,.csv" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;" />
+            <button class="btn btn-add" id="btn-analyze" onclick="uploadAndAnalyzeReport()">Analyze eBay Report</button>
+            <button class="hdr-btn" onclick="autoDetectLocalReport()">Auto-Detect Downloads Report</button>
+          </div>
+          <div id="report-status" style="margin-top: 10px; font-weight: 500; color: #444;"></div>
+        </div>
+      </div>
+
+      <!-- Section 2: Auto-Recommended SKU Refresh Queue -->
+      <div class="etsy-card" id="queue-card" style="display: none;">
+        <div class="card-header">
+          <h2>2. Recommended Refresh Queue (Ranked by Urgency)</h2>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">The algorithm calculated your store's Cassini staleness score across all SKU groups. Groups at the top have the highest % of stale deadweight dragging down your ranking.</p>
+          
+          <div id="sku-queue-list" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;"></div>
+        </div>
+      </div>
+
+      <!-- Section 3: Interactive Group Triage & Action Export -->
+      <div class="etsy-card" id="triage-card" style="display: none;">
+        <div class="card-header">
+          <h2>3. Refresh Execution & Safety Shield for <span id="selected-group-title" style="color: #2b6cb0;">--</span></h2>
+        </div>
+        <div class="card-body">
+          <div class="status-body-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 16px;">
+            <div class="stat-box">
+              <span class="stat-label">Total Active</span>
+              <span id="triage-stat-total" class="stat-value">0</span>
+            </div>
+            <div class="stat-box" style="border-left: 3px solid #2e7d32;">
+              <span class="stat-label">🟢 Protected (Keep)</span>
+              <span id="triage-stat-protected" class="stat-value" style="color: #2e7d32;">0</span>
+            </div>
+            <div class="stat-box" style="border-left: 3px solid #c62828;">
+              <span class="stat-label">🔴 Stale (To End)</span>
+              <span id="triage-stat-stale" class="stat-value" style="color: #c62828;">0</span>
+            </div>
+            <div class="stat-box" style="border-left: 3px solid #f57c00;">
+              <span class="stat-label">🌟 Evergreen (Sales)</span>
+              <span id="triage-stat-evergreen" class="stat-value" style="color: #f57c00;">0</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <button class="btn btn-add" style="background-color: #c62828;" onclick="downloadActionEndCSV()">
+              🔴 Download Action=End CSV (<span id="btn-end-count">0</span> Stale Items)
+            </button>
+          </div>
+
+          <h3>Items Breakdown Preview</h3>
+          <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-top: 8px;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+              <thead style="background-color: #f5f5f5; sticky: top 0;">
+                <tr>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Status</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Item ID</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">SKU</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Title</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Watchers</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Age (Days)</th>
+                </tr>
+              </thead>
+              <tbody id="triage-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let parsedListings = [];
+      let selectedGroup = null;
+      let currentTriage = null;
+
+      async function uploadAndAnalyzeReport() {
+        const fileInput = document.getElementById('report-file-input');
+        if (!fileInput.files || fileInput.files.length === 0) {
+          alert('Please select a .xlsx or .csv report file first.');
+          return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        document.getElementById('report-status').innerText = 'Analyzing report... Please wait.';
+        
+        try {
+          const res = await fetch('/api/ebay/analyze-report', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            document.getElementById('report-status').innerText = 'Error analyzing file: ' + (data.error || 'Unknown error');
+            return;
+          }
+          
+          parsedListings = data.listings || [];
+          document.getElementById('report-status').innerText = `Successfully loaded ${data.total_listings} active listings across ${data.ranked_groups.length} SKU groups.`;
+          renderQueue(data.ranked_groups);
+        } catch (err) {
+          document.getElementById('report-status').innerText = 'Upload failed: ' + err.message;
+        }
+      }
+
+      async function autoDetectLocalReport() {
+        document.getElementById('report-status').innerText = 'Scanning for recent reports in Downloads...';
+        try {
+          const res = await fetch('/api/ebay/auto-detect-report', { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            document.getElementById('report-status').innerText = 'Auto-detect: ' + (data.error || 'No report found in Downloads.');
+            return;
+          }
+          parsedListings = data.listings || [];
+          document.getElementById('report-status').innerText = `Loaded ${data.filename} (${data.total_listings} listings across ${data.ranked_groups.length} groups).`;
+          renderQueue(data.ranked_groups);
+        } catch (err) {
+          document.getElementById('report-status').innerText = 'Scan failed: ' + err.message;
+        }
+      }
+
+      function renderQueue(groups) {
+        const queueContainer = document.getElementById('sku-queue-list');
+        queueContainer.innerHTML = '';
+        
+        groups.forEach((g, index) => {
+          const badgeClass = g.stale_percentage >= 80 ? 'badge-draft' : (g.stale_percentage >= 50 ? 'badge-listed' : '');
+          const cardHtml = `
+            <div style="border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; background-color: #fff;">
+              <div>
+                <strong style="font-size: 16px;">#${index + 1} SKU Group: ${g.sku_group}</strong>
+                <span class="badge ${badgeClass}" style="margin-left: 8px;">${g.stale_percentage}% Stale</span>
+                <div style="font-size: 13px; color: #666; margin-top: 4px;">
+                  Total: <strong>${g.total_count}</strong> | Stale (0 Watchers): <strong>${g.stale_count}</strong> | Protected Winners: <strong>${g.protected_count}</strong> | Avg Age: <strong>${g.avg_age_days} days</strong>
+                </div>
+              </div>
+              <button class="btn btn-add" onclick="selectGroupForTriage('${g.sku_group}')">Select Group</button>
+            </div>
+          `;
+          queueContainer.insertAdjacentHTML('beforeend', cardHtml);
+        });
+
+        document.getElementById('queue-card').style.display = 'block';
+      }
+
+      async function selectGroupForTriage(grp) {
+        selectedGroup = grp;
+        document.getElementById('selected-group-title').innerText = grp;
+        
+        try {
+          const res = await fetch('/api/ebay/triage-group', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sku_group: grp, listings: parsedListings })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            alert('Triage error: ' + (data.error || 'Failed to triage group'));
+            return;
+          }
+
+          currentTriage = data.triage;
+          document.getElementById('triage-stat-total').innerText = (data.triage.protected.length + data.triage.stale.length);
+          document.getElementById('triage-stat-protected').innerText = data.triage.protected.length;
+          document.getElementById('triage-stat-stale').innerText = data.triage.stale.length;
+          document.getElementById('triage-stat-evergreen').innerText = data.triage.evergreen.length;
+          document.getElementById('btn-end-count').innerText = data.triage.stale.length;
+
+          renderTriageTable(data.triage);
+          document.getElementById('triage-card').style.display = 'block';
+          document.getElementById('triage-card').scrollIntoView({ behavior: 'smooth' });
+        } catch (err) {
+          alert('Triage request failed: ' + err.message);
+        }
+      }
+
+      function renderTriageTable(triage) {
+        const tbody = document.getElementById('triage-table-body');
+        tbody.innerHTML = '';
+
+        const allItems = [
+          ...triage.stale.map(i => ({ ...i, category: 'STALE' })),
+          ...triage.protected.map(i => ({ ...i, category: 'PROTECTED' }))
+        ];
+
+        allItems.forEach(item => {
+          const isStale = item.category === 'STALE';
+          const badge = isStale 
+            ? '<span style="color: #c62828; font-weight: bold;">🔴 STALE (END)</span>' 
+            : '<span style="color: #2e7d32; font-weight: bold;">🟢 PROTECTED</span>';
+            
+          const row = `
+            <tr style="border-bottom: 1px solid #eee;">
+              <td style="padding: 6px 8px;">${badge}</td>
+              <td style="padding: 6px 8px;">${item.item_id}</td>
+              <td style="padding: 6px 8px;"><strong>${item.custom_label}</strong></td>
+              <td style="padding: 6px 8px; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.title}</td>
+              <td style="padding: 6px 8px;">${item.watchers}</td>
+              <td style="padding: 6px 8px;">${item.item_age_days}d</td>
+            </tr>
+          `;
+          tbody.insertAdjacentHTML('beforeend', row);
+        });
+      }
+
+      async function downloadActionEndCSV() {
+        if (!currentTriage || !currentTriage.stale || currentTriage.stale.length === 0) {
+          alert('No stale items to end for this group.');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/ebay/export-action-end', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stale_items: currentTriage.stale })
+          });
+
+          if (!res.ok) {
+            alert('Failed to generate CSV');
+            return;
+          }
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Action_End_${selectedGroup}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } catch (err) {
+          alert('Export failed: ' + err.message);
+        }
+      }
+    </script>
+  </body>
+</html>
