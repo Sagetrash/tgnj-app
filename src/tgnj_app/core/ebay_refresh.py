@@ -431,7 +431,11 @@ def generate_ebay_creation_csv(
 
     pair_str = "Pair " if is_pair else ""
 
-    for idx, item in enumerate(items):
+    valid_idx = 0
+    for item in items:
+        if str(item.get("status") or "").upper() == "SOLD":
+            continue
+            
         group = (item.get("sku_group") or "").upper()
         sku_id = int(item.get("sku_id") or 0)
         sku_str = f"{group}-{sku_id:03d}"
@@ -452,7 +456,8 @@ def generate_ebay_creation_csv(
             title = title[:80].strip()
             
         # Stagger publication time by 1 minute per row
-        sched_dt = base_dt + timedelta(minutes=idx)
+        sched_dt = base_dt + timedelta(minutes=valid_idx)
+        valid_idx += 1
         sched_str = sched_dt.strftime('%Y-%m-%dT%H:%M:%00+05:30')
         
         photo_a = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}A.jpg"

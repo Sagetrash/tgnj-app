@@ -215,12 +215,12 @@
 
             <div>
               <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Batch Gemstone Name:</label>
-              <input type="text" id="create-gemstone-name" placeholder="e.g. Black Rutile Quartz" value="Black Rutile Quartz" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
+              <input type="text" id="create-gemstone-name" placeholder="e.g. Black Rutile Quartz" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
             </div>
 
             <div>
               <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Asking Start Price ($):</label>
-              <input type="number" step="0.01" id="create-start-price" value="9.99" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
+              <input type="number" step="0.01" id="create-start-price" placeholder="e.g. 9.99" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
             </div>
 
             <div>
@@ -517,8 +517,18 @@
           return;
         }
 
-        const gemstoneName = document.getElementById('create-gemstone-name').value.trim() || 'Black Rutile Quartz';
-        const startPrice = parseFloat(document.getElementById('create-start-price').value) || 9.99;
+        const gemstoneName = document.getElementById('create-gemstone-name').value.trim();
+        if (!gemstoneName) {
+          alert('Please enter a Batch Gemstone Name (e.g. Black Rutile Quartz, Chrysoprase).');
+          return;
+        }
+
+        const priceVal = document.getElementById('create-start-price').value.trim();
+        const startPrice = parseFloat(priceVal);
+        if (!priceVal || isNaN(startPrice) || startPrice <= 0) {
+          alert('Please enter a valid Asking Start Price ($).');
+          return;
+        }
         const scheduleTime = document.getElementById('create-schedule-time').value;
         const isPair = document.getElementById('create-is-pair').checked;
 

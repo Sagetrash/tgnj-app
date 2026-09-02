@@ -458,9 +458,9 @@ def apiEbayExportCreationCSV():
     with db_instance.conn as conn:
         curs = conn.cursor()
         curs.execute("""
-            SELECT sku_group, sku_id, shape, weight, length, width, depth 
+            SELECT sku_group, sku_id, shape, weight, length, width, depth, status 
             FROM inventory 
-            WHERE sku_group = ? AND is_deleted = 0 
+            WHERE sku_group = ? AND is_deleted = 0 AND (status IS NULL OR status != 'SOLD')
             ORDER BY sku_id ASC;
         """, (sku_group,))
         rows = curs.fetchall()
