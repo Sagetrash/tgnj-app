@@ -467,6 +467,8 @@ def generate_ebay_creation_csv(
         photo_b = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}B.jpg"
         photos = f"{photo_a} | {photo_b}"
         
+        item_price = float(item.get("start_price") or start_price)
+        
         row = [
             "Add",
             sku_str,
@@ -474,7 +476,7 @@ def generate_ebay_creation_csv(
             "/Jewelry & Watches/Loose Diamonds & Gemstones/Loose Gemstones",
             title,
             sched_str,
-            f"{start_price:.2f}",
+            f"{item_price:.2f}",
             "1",
             photos,
             "",
