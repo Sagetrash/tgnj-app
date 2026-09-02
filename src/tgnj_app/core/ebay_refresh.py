@@ -458,7 +458,7 @@ def generate_ebay_creation_csv(
         # Stagger publication time by 1 minute per row
         sched_dt = base_dt + timedelta(minutes=valid_idx)
         valid_idx += 1
-        sched_str = sched_dt.strftime('%Y-%m-%dT%H:%M:%00+05:30')
+        sched_str = sched_dt.strftime('%Y-%m-%dT%H:%M:%S+05:30')
         
         photo_a = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}A.jpg"
         photo_b = f"https://tgnj-pictures.s3.us-east-1.amazonaws.com/{group}/{sku_str}B.jpg"
