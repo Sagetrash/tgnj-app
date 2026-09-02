@@ -355,7 +355,8 @@ def generate_ebay_creation_csv(
     gemstone_name: str = "Black Rutile Quartz",
     start_price: float = 9.99,
     schedule_start_time: str = "",
-    is_pair: bool = False
+    is_pair: bool = False,
+    transparency: str = "Transparent"
 ) -> str:
     """
     Generates official eBay Bulk Listing Creation CSV matching fx_category_template_EBAY_US schema.
@@ -502,7 +503,7 @@ def generate_ebay_creation_csv(
             "Excellent",
             "Eye Clean",
             gemstone_name,
-            "Transparent",
+            transparency,
             "",
             ""
         ]

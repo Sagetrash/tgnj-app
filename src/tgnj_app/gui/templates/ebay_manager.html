@@ -227,6 +227,16 @@
               <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Schedule Launch Start Time:</label>
               <input type="datetime-local" id="create-schedule-time" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
             </div>
+
+            <div>
+              <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Stone Transparency:</label>
+              <select id="create-transparency" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;">
+                <option value="Transparent">Transparent</option>
+                <option value="Translucent">Translucent</option>
+                <option value="Opaque">Opaque</option>
+                <option value="Semi-Transparent">Semi-Transparent</option>
+              </select>
+            </div>
           </div>
 
           <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 18px; flex-wrap: wrap; gap: 12px;">
@@ -541,7 +551,8 @@
               gemstone_name: gemstoneName,
               start_price: startPrice,
               schedule_start_time: scheduleTime,
-              is_pair: isPair
+              is_pair: isPair,
+              transparency: document.getElementById('create-transparency').value
             })
           });
 

@@ -451,6 +451,7 @@ def apiEbayExportCreationCSV():
         start_price = 9.99
     schedule_start_time = data.get('schedule_start_time', '')
     is_pair = bool(data.get('is_pair', False))
+    transparency = data.get('transparency', 'Transparent')
     
     if not sku_group:
         return jsonify({'success': False, 'error': 'Missing sku_group'}), 400
@@ -474,7 +475,8 @@ def apiEbayExportCreationCSV():
         gemstone_name=gemstone_name,
         start_price=start_price,
         schedule_start_time=schedule_start_time,
-        is_pair=is_pair
+        is_pair=is_pair,
+        transparency=transparency
     )
     
     mem_file = io.BytesIO(csv_content.encode('utf-8'))
