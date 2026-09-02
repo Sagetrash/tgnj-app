@@ -37,13 +37,13 @@ def setConfig(db_path:Path):
     if os.path.exists:
         db_path_str = str(db_path)
         try:
-            with open(CONFIG_LOCATION, "r") as f:
+            with open(CONFIG_LOCATION, "r", encoding="utf-8") as f:
                 config = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             config = {}
         config["db_Path"] = db_path_str
-        with open(CONFIG_LOCATION, "w") as f:
-            json.dump(config,f)
+        with open(CONFIG_LOCATION, "w", encoding="utf-8") as f:
+            json.dump(config, f)
         return db_path_str
     else:
         raise FileNotFoundError
@@ -52,7 +52,7 @@ def message(string:str)-> dict:
     return {"message":string}
 
 def getConfig():
-    with open(CONFIG_LOCATION,'r') as f:
+    with open(CONFIG_LOCATION, 'r', encoding='utf-8') as f:
         config = json.load(f)
         db_path = config.get('db_Path')
         if not db_path or not Path(db_path).exists():
@@ -63,7 +63,7 @@ def getConfig():
 def load_turso_config() -> tuple[str | None, str | None, int]:
     """Read turso_url, turso_token, sync_interval_seconds from Config.json."""
     try:
-        with open(CONFIG_LOCATION, 'r') as f:
+        with open(CONFIG_LOCATION, 'r', encoding='utf-8') as f:
             config = json.load(f)
         return (
             config.get('turso_url'),
@@ -300,13 +300,13 @@ def setTursoConfig():
         return jsonify(message('turso_url and turso_token are required')), 400
     # Persist to Config.json (merge with existing config)
     try:
-        with open(CONFIG_LOCATION, 'r') as f:
+        with open(CONFIG_LOCATION, 'r', encoding='utf-8') as f:
             config = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         config = {}
     config['turso_url'] = turso_url
     config['turso_token'] = turso_token
-    with open(CONFIG_LOCATION, 'w') as f:
+    with open(CONFIG_LOCATION, 'w', encoding='utf-8') as f:
         json.dump(config, f)
     # Create client and start sync thread if not already started
     turso_client = TursoClient(turso_url, turso_token)
@@ -351,15 +351,16 @@ def apiEbayAnalyzeReport():
     if not file or not file.filename:
         return jsonify({'success': False, 'error': 'Empty filename'}), 400
         
-    filename = file.filename.lower()
+    safe_filename = Path(file.filename).name
+    filename_lower = safe_filename.lower()
     import tempfile
     temp_dir = Path(tempfile.gettempdir())
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / file.filename
+    temp_path = temp_dir / safe_filename
     file.save(temp_path)
     
     try:
-        if filename.endswith('.xlsx'):
+        if filename_lower.endswith('.xlsx'):
             listings = ebay_refresh.parse_quality_report_xlsx(str(temp_path))
         else:
             content = temp_path.read_text(encoding='utf-8', errors='ignore')
@@ -384,6 +385,9 @@ def apiEbayAnalyzeReport():
 @app.route('/api/ebay/auto-detect-report', methods=['POST'])
 def apiEbayAutoDetectReport():
     downloads = Path.home() / 'Downloads'
+    if not downloads.exists() or not downloads.is_dir():
+        return jsonify({'success': False, 'error': 'Downloads directory does not exist on this machine'}), 404
+        
     candidates = list(downloads.glob('Listing quality report*.xlsx')) + list(downloads.glob('eBay-all-active-listings*.csv'))
     if not candidates:
         return jsonify({'success': False, 'error': 'No report found in Downloads directory'}), 404
