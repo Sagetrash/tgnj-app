@@ -363,7 +363,7 @@ def apiEbayAnalyzeReport():
         if filename_lower.endswith('.xlsx'):
             listings = ebay_refresh.parse_quality_report_xlsx(str(temp_path))
         else:
-            content = temp_path.read_text(encoding='utf-8', errors='ignore')
+            content = temp_path.read_text(encoding='utf-8-sig', errors='ignore')
             listings = ebay_refresh.parse_active_listings_csv(content)
             
         ranked_groups = ebay_refresh.analyze_sku_groups(listings)
@@ -399,7 +399,7 @@ def apiEbayAutoDetectReport():
         if target.name.endswith('.xlsx'):
             listings = ebay_refresh.parse_quality_report_xlsx(str(target))
         else:
-            content = target.read_text(encoding='utf-8', errors='ignore')
+            content = target.read_text(encoding='utf-8-sig', errors='ignore')
             listings = ebay_refresh.parse_active_listings_csv(content)
             
         ranked_groups = ebay_refresh.analyze_sku_groups(listings)

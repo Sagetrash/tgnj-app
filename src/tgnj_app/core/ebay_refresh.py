@@ -11,6 +11,7 @@ def parse_active_listings_csv(csv_content: str) -> List[Dict[str, Any]]:
     Parses eBay Active Listings CSV (eBay-all-active-listings-report-*.csv).
     Returns list of normalized listing dicts.
     """
+    csv_content = csv_content.lstrip('\ufeff')
     reader = csv.DictReader(io.StringIO(csv_content))
     listings = []
     
