@@ -447,10 +447,12 @@ def generate_ebay_creation_csv(
         width = int(item.get("width") or 0)
         depth = int(item.get("depth") or 0)
         
+        item_gem_name = (item.get("gemstone_name") or gemstone_name).strip()
+        
         # Build Title with exact formula:
         # {weight} Ct Natural {gem_name} {shape} Cabochon Loose Gemstone Pair {L}x{W}x{D} mm
         wt_str = f"{weight:.2f}".rstrip('0').rstrip('.')
-        title = f"{wt_str} Ct. Natural {gemstone_name} {shape} Cabochon Loose Gemstone {pair_str}{length}x{width}x{depth} mm"
+        title = f"{wt_str} Ct. Natural {item_gem_name} {shape} Cabochon Loose Gemstone {pair_str}{length}x{width}x{depth} mm"
         
         # Enforce eBay <= 80 character Title limit
         if len(title) > 80:
@@ -486,7 +488,7 @@ def generate_ebay_creation_csv(
             "Shipping",
             "Return - (ID: 136228479010)",
             "Payment - (ID: 232882248010)",
-            gemstone_name,
+            item_gem_name,
             shape,
             f"{length} mm" if length > 0 else "",
             f"{width} mm" if width > 0 else "",
@@ -502,7 +504,7 @@ def generate_ebay_creation_csv(
             "Unbranded",
             "Excellent",
             "Eye Clean",
-            gemstone_name,
+            item_gem_name,
             transparency,
             "",
             ""
