@@ -17,11 +17,9 @@ import json
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-from datetime import datetime, timedelta, timezone
 
 if TYPE_CHECKING:
     from tgnj_app.core.database import database

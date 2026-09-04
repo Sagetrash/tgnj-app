@@ -1,10 +1,9 @@
-from reportlab.lib.pagesizes import A4
 from io import BytesIO
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm, cm
-from reportlab.lib.utils import ImageReader
-import os
 
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm, mm
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 # Avery L7651 specs
 LABEL_WIDTH = 38.1 * mm

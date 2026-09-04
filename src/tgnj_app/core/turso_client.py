@@ -1,10 +1,10 @@
 """
-Turso HTTP API client — zero external dependencies.
+Turso HTTP API client
 All methods return None on any failure (never raise).
 """
 import json
 import urllib.request
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError, URLError
 
 
 class TursoClient:
