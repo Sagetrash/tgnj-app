@@ -1,0 +1,11 @@
+# OS & System files
+.DS_Store
+Thumbs.db
+
+# Obsidian App Config Churn
+.brain/.obsidian/
+examples/sample-brain/.obsidian/
+
+# Environment / local state
+*.tmp
+*.log

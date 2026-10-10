@@ -465,8 +465,101 @@ class TestTgnjApp(unittest.TestCase):
         self.assertEqual(item['status'], 'LISTED_ETSY')
         self.assertEqual(item['sold_price'], 0.0)
 
+    def test_sync_ebay_sales_live_and_outbox(self):
+        """Verify /api/ebay/sync_sales parses CSV, updates inventory, and enqueues outbox mutations."""
+        self.db.add_item("TEST", 101, "Oval", 15.0, 20, 15, 6)
+        self.db.add_item("TEST", 102, "Pear", 12.0, 18, 12, 5)
+
+        sample_csv = (
+            ",,,,,,,,,,,,,,,,,,,,\n"
+            '"Sales Record Number","Order Number","Buyer Username","Buyer Name","Buyer Email","Buyer Note","Item Number","Item Title","Custom Label","Sold For","Sale Date"\n'
+            '"1001","01-11111","buyer1","John Doe","buyer1@test.com","","99887766","Test Stone 1","TEST-101","$25.50","Aug-29-26"\n'
+            '"1002","01-22222","buyer2","Jane Smith","buyer2@test.com","","99887767","Test Stone 2","TEST 102","$40.00","Aug-29-26"\n'
+        )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db):
+            response = self.client.post('/api/ebay/sync_sales', json={
+                'csv_content': sample_csv,
+                'dry_run': False
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.json
+            self.assertEqual(data['status'], 'success')
+            self.assertEqual(data['summary']['updated_sold_count'], 2)
+            self.assertEqual(data['summary']['total_sales_amount'], 65.50)
+
+        # Check DB items
+        item1 = self.db.get_item_by_sku("TEST", 101)
+        self.assertEqual(item1['status'], 'SOLD')
+        self.assertEqual(item1['sold_channel'], 'eBay')
+        self.assertEqual(item1['sold_price'], 25.50)
+
+        item2 = self.db.get_item_by_sku("TEST", 102)
+        self.assertEqual(item2['status'], 'SOLD')
+        self.assertEqual(item2['sold_channel'], 'eBay')
+        self.assertEqual(item2['sold_price'], 40.00)
+
+        # Check outbox entries
+        with self.db.conn as conn:
+            curs = conn.cursor()
+            curs.execute("SELECT sku_group, sku_id, action, payload FROM outbox WHERE action = 'MARK_SOLD'")
+            mutations = curs.fetchall()
+            self.assertEqual(len(mutations), 2)
+            self.assertEqual(mutations[0]['sku_group'], 'TEST')
+            self.assertEqual(mutations[0]['sku_id'], 101)
+
+    def test_sync_ebay_sales_dry_run_mode(self):
+        """Verify dry_run=True returns accurate preview stats without mutating database."""
+        self.db.add_item("TEST", 201, "Oval", 10.0, 15, 10, 5)
+
+        sample_csv = (
+            '"Sales Record Number","Custom Label","Sold For","Sale Date"\n'
+            '"2001","TEST-201","$19.99","Aug-30-26"\n'
+        )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db):
+            response = self.client.post('/api/ebay/sync_sales', json={
+                'csv_content': sample_csv,
+                'dry_run': True
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.json
+            self.assertTrue(data['dry_run'])
+            self.assertEqual(data['summary']['updated_sold_count'], 1)
+            self.assertEqual(data['summary']['total_sales_amount'], 19.99)
+
+        # Item should remain IN_STOCK
+        item = self.db.get_item_by_sku("TEST", 201)
+        self.assertEqual(item['status'], 'IN_STOCK')
+        self.assertEqual(item['sold_price'], 0.0)
+
+    def test_sync_ebay_sales_etsy_delist_alert(self):
+        """Verify items currently active on Etsy are flagged with delist alerts."""
+        self.db.add_item("TEST", 301, "Marquise", 8.0, 14, 8, 4)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'LISTED_ETSY', etsy_listing_id = '987654321' WHERE sku_group = 'TEST' AND sku_id = 301;"
+            )
+
+        sample_csv = (
+            '"Sales Record Number","Custom Label","Sold For","Sale Date"\n'
+            '"3001","TEST-301","$35.00","Aug-30-26"\n'
+        )
+
+        with patch('tgnj_app.gui.app.db_instance', self.db):
+            response = self.client.post('/api/ebay/sync_sales', json={
+                'csv_content': sample_csv,
+                'dry_run': False
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.json
+            self.assertEqual(len(data['etsy_delist_alerts']), 1)
+            self.assertEqual(data['etsy_delist_alerts'][0]['sku'], 'TEST-301')
+            self.assertEqual(data['etsy_delist_alerts'][0]['etsy_listing_id'], '987654321')
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

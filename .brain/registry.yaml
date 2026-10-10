@@ -1,0 +1,73 @@
+version: 1
+updated: "2026-08-07"
+notes:
+  - name: Project State
+    path: "project-state.md"
+    type: project
+    status: active
+    tags: [project/state]
+    summary: Active project status, health indicators, and core architecture pillars.
+    updated: "2026-08-07"
+  - name: System Architecture
+    path: "architecture.md"
+    type: architecture
+    status: active
+    tags: [architecture]
+    summary: High-level local-first SQLite outbox queue, Turso master DB push/pull sync, and Etsy OpenAPI v3 integration diagram.
+    updated: "2026-08-07"
+  - name: Database & Outbox Engine
+    path: "components/database-outbox.md"
+    type: component
+    status: active
+    tags: [component/database, database/sqlite, pattern/outbox]
+    summary: Complete database schemas (inventory, outbox, metadata), outbox mutation types, and field isolation rules.
+    updated: "2026-08-07"
+  - name: Turso Sync Engine
+    path: "components/sync-engine.md"
+    type: component
+    status: active
+    tags: [component/sync, sync/turso]
+    summary: 2s OutboxFlusher push daemon, 30s pull sync engine, 120s overlap window, and zero-dependency HTTP client rules.
+    updated: "2026-08-07"
+  - name: Etsy & AWS S3 Integration
+    path: "components/etsy-s3-integration.md"
+    type: component
+    status: active
+    tags: [component/etsy, integration/s3]
+    summary: OAuth 2.0 PKCE, Etsy OpenAPI v3 client, AWS S3 image download/auto-compression (>1MB -> max 2000px 90% JPEG), and draft guard.
+    updated: "2026-08-07"
+  - name: PDF Labels & CSV Exporter
+    path: "components/pdf-labels-export.md"
+    type: component
+    status: active
+    tags: [component/reporting, pdf/reportlab]
+    summary: ReportLab PDF jewel tag label generator, TSV/CSV exporter, and legacy spreadsheet importer.
+    updated: "2026-08-07"
+  - name: Flask Server & Frontend UI
+    path: "components/flask-frontend-ui.md"
+    type: component
+    status: active
+    tags: [component/frontend, backend/flask]
+    summary: Flask REST routes, main launcher, index.html/etsy_manager.html templates, and frontend script.js UI logic.
+    updated: "2026-08-07"
+  - name: eBay Refresh Engine & Operations Hub
+    path: "components/ebay-refresh-engine.md"
+    type: component
+    status: active
+    tags: [component/ebay, feature/refresh-engine]
+    summary: eBay quality report parser, automated SKU group urgency ranking, winner protection shield, and Action=End CSV generator.
+    updated: "2026-09-02"
+  - name: Session Log 2026-08-07
+    path: "session-logs/2026-08-07.md"
+    type: session
+    status: active
+    tags: [session]
+    summary: Deepened Obsidian Agent Memory brain structure to 100% codebase coverage.
+    updated: "2026-08-07"
+  - name: Session Log 2026-09-02
+    path: "session-logs/2026-09-02.md"
+    type: session
+    status: active
+    tags: [session]
+    summary: Researched eBay Reports for bulk ending, built ebay_refresh core parser/ranker/generator, created ebay_manager.html UI, and added unit tests.
+    updated: "2026-09-02"

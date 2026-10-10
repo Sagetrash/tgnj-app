@@ -1,0 +1,38 @@
+version: 1
+updated: 2026-08-07
+notes:
+  - name: Project State
+    path: "project-state.md"
+    type: project
+    status: active
+    tags: [project/state]
+    summary: Active status, health indicators, and next steps for the obsidian-for-agents project.
+    updated: 2026-08-07
+  - name: Obsidian Agent Memory Architecture
+    path: "architecture.md"
+    type: architecture
+    status: active
+    tags: [architecture, skill]
+    summary: System design, 5 modular reference subdocs, and repository directory layout.
+    updated: 2026-08-07
+  - name: Adopt agentskills.io Specification and 5 Modular Subdocs
+    path: "decisions/2026-08-07-adopt-agentskills-io-spec.md"
+    type: decision
+    status: approved
+    tags: [decision, specification, agentskills]
+    summary: Adopt agentskills.io format for SKILL.md and split protocols into 5 reference documents.
+    updated: 2026-08-07
+  - name: Vault Health Validator & Wikilink Stem Resolution
+    path: "discoveries.md"
+    type: discovery
+    status: active
+    tags: [discovery, validation, gotcha]
+    summary: Wikilink stem resolution rules and verification checks in vault-health.py.
+    updated: 2026-08-07
+  - name: Session Log 2026-08-07
+    path: "session-logs/2026-08-07.md"
+    type: session
+    status: active
+    tags: [session]
+    summary: Initialized repository memory vault and verified vault health cleanly.
+    updated: 2026-08-07

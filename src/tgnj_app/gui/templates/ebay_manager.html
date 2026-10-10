@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>eBay Operations Hub - TakshGems</title>
+    <link rel="stylesheet" href="{{url_for('static',filename='style.css')}}" />
+    <link
+      rel="icon"
+      href="{{ url_for('static', filename='logo.ico') }}"
+      type="image/x-icon"
+    />
+    <style>
+      /* High-contrast typography & Dark Theme legibility fixes */
+      body {
+        color: #ffffff !important;
+      }
+      .etsy-card {
+        background: #121838 !important;
+        border: 1px solid rgba(250, 185, 91, 0.4) !important;
+      }
+      .section-desc {
+        color: #d1d5db !important;
+        font-size: 0.95rem;
+      }
+      .queue-item-card {
+        background: #1a234d !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        color: #ffffff !important;
+        padding: 14px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .queue-item-card:hover {
+        border-color: #fab95b !important;
+        background: #222d61 !important;
+      }
+      .text-bright {
+        color: #ffffff !important;
+      }
+      .text-gold {
+        color: #fab95b !important;
+      }
+      .text-muted-bright {
+        color: #cbd5e1 !important;
+      }
+      .custom-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: #fab95b;
+      }
+      .ebay-table {
+        width: 100%;
+        border-collapse: collapse;
+        color: #ffffff;
+        font-size: 0.9rem;
+      }
+      .ebay-table th {
+        background: #090e24;
+        color: #fab95b;
+        padding: 10px 12px;
+        border-bottom: 2px solid rgba(250, 185, 91, 0.3);
+      }
+      .ebay-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .ebay-table tr:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .btn-danger-bright {
+        background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%) !important;
+        color: #ffffff !important;
+        font-weight: bold;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .btn-danger-bright:hover {
+        background: #9b2c2c !important;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-brand">
+        <h1>TakshGems eBay Operations Hub</h1>
+      </div>
+      
+      <div class="header-actions">
+        <button type="button" class="hdr-btn" onclick="window.location.href='/'">Back to Inventory</button>
+        <button type="button" class="hdr-btn etsy-hdr-btn" onclick="window.location.href='/etsy'">Etsy Operations</button>
+        <button type="button" class="hdr-btn settings-btn" onclick="openSettingsModal()">Settings</button>
+      </div>
+    </header>
+
+    <div class="etsy-hub-container">
+      <!-- Section 1: File Upload & Report Inspector -->
+      <div class="etsy-card">
+        <div class="card-header">
+          <h2 class="text-gold">1. Load eBay Performance & Active Listings Report</h2>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Upload your <strong>Listing Quality Report (.xlsx)</strong> or <strong>Active Listings Report (.csv)</strong> from eBay Seller Hub to analyze store staleness and rank SKU groups by refresh urgency.</p>
+          
+          <div style="display: flex; gap: 12px; align-items: center; margin-top: 14px; flex-wrap: wrap;">
+            <input type="file" id="report-file-input" accept=".xlsx,.csv" style="padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff;" />
+            <button class="btn btn-add" id="btn-analyze" onclick="uploadAndAnalyzeReport()">Analyze eBay Report</button>
+            <button class="hdr-btn" onclick="autoDetectLocalReport()">Auto-Detect Downloads Report</button>
+          </div>
+          <div id="report-status" style="margin-top: 12px; font-weight: 600; color: #fab95b; font-size: 0.95rem;"></div>
+        </div>
+      </div>
+
+      <!-- Section 2: Auto-Recommended SKU Refresh Queue & Multi-Select -->
+      <div class="etsy-card" id="queue-card" style="display: none;">
+        <div class="card-header">
+          <h2 class="text-gold">2. Recommended Refresh Queue (Select Multiple SKU Groups)</h2>
+          <div>
+            <button class="hdr-btn" style="font-size: 0.8rem; padding: 4px 10px;" onclick="selectAllStaleQueueGroups(true)">Select All Stale</button>
+            <button class="hdr-btn" style="font-size: 0.8rem; padding: 4px 10px;" onclick="selectAllStaleQueueGroups(false)">Deselect All</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Select one or multiple SKU groups below to perform a combined batch refresh. Checkboxes allow exporting a single combined <strong>Action=End CSV</strong> for all selected groups.</p>
+          
+          <div id="sku-queue-list" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px;"></div>
+
+          <!-- Multi-Group Action Bar -->
+          <div id="multi-group-action-bar" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="font-weight: 600; color: #ffffff; font-size: 1rem;">
+              Selected Groups: <span id="multi-selected-group-count" class="text-gold">0</span> | Combined Stale Items to End: <span id="multi-selected-stale-count" class="text-gold">0</span>
+            </div>
+            <button class="btn-danger-bright" onclick="downloadMultiGroupActionEndCSV()">
+              🔴 Export Action=End CSV for Selected SKU Groups (<span id="btn-multi-end-count">0</span> Items)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Interactive Group Triage & Individual Multi-Select -->
+      <div class="etsy-card" id="triage-card" style="display: none;">
+        <div class="card-header">
+          <h2 class="text-gold">3. Detailed Triage & Safety Shield for SKU Group: <span id="selected-group-title" style="color: #64b5f6;">--</span></h2>
+        </div>
+        <div class="card-body">
+          <div class="status-body-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 18px;">
+            <div class="stat-box">
+              <span class="stat-label" style="color: #cbd5e1;">Total Active</span>
+              <span id="triage-stat-total" class="stat-value" style="color: #ffffff;">0</span>
+            </div>
+            <div class="stat-box" style="border-left: 4px solid #2ecc71;">
+              <span class="stat-label" style="color: #2ecc71;">🟢 Protected (Keep)</span>
+              <span id="triage-stat-protected" class="stat-value" style="color: #2ecc71;">0</span>
+            </div>
+            <div class="stat-box" style="border-left: 4px solid #ff5252;">
+              <span class="stat-label" style="color: #ff5252;">🔴 Stale (To End)</span>
+              <span id="triage-stat-stale" class="stat-value" style="color: #ff5252;">0</span>
+            </div>
+            <div class="stat-box" style="border-left: 4px solid #ffb74d;">
+              <span class="stat-label" style="color: #ffb74d;">🌟 Evergreen (Sales)</span>
+              <span id="triage-stat-evergreen" class="stat-value" style="color: #ffb74d;">0</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h3 style="margin: 0; color: #fab95b;">Items Breakdown Preview</h3>
+              <span style="font-size: 0.85rem; color: #cbd5e1;">Select specific items using checkboxes below to export custom cancellation batches.</span>
+            </div>
+            <button class="btn-danger-bright" onclick="downloadSelectedTriageItemsCSV()">
+              🔴 Export Action=End CSV for Checked Items (<span id="btn-triage-checked-count">0</span> Checked)
+            </button>
+          </div>
+
+          <div style="max-height: 380px; overflow-y: auto; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px;">
+            <table class="ebay-table">
+              <thead style="position: sticky; top: 0; z-index: 10;">
+                <tr>
+                  <th style="width: 40px; text-align: center;">
+                    <input type="checkbox" class="custom-checkbox" id="master-triage-checkbox" onchange="toggleAllTriageCheckboxes(this.checked)" />
+                  </th>
+                  <th>Status</th>
+                  <th>Item ID</th>
+                  <th>Custom Label (SKU)</th>
+                  <th>Title</th>
+                  <th>Watchers</th>
+                  <th>Age (Days)</th>
+                </tr>
+              </thead>
+              <tbody id="triage-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Bulk Creation Template Generator -->
+      <div class="etsy-card" id="creation-card">
+        <div class="card-header">
+          <h2 class="text-gold">4. Generate eBay Bulk Creation Upload Template CSV</h2>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">Generate official <strong>fx_category_template_EBAY_US</strong> bulk upload CSVs to create new listings or re-upload refreshed SKU groups with 1-minute staggered scheduling, S3 photo links, and 80-character title guards.</p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;">
+            <div>
+              <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Target SKU Group:</label>
+              <input type="text" id="create-sku-group" placeholder="e.g. J9, D1, PP01" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
+            </div>
+
+            <div>
+              <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Batch Gemstone Name:</label>
+              <input type="text" id="create-gemstone-name" placeholder="e.g. Black Rutile Quartz" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
+            </div>
+
+            <div>
+              <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Asking Start Price ($):</label>
+              <input type="number" step="0.01" id="create-start-price" placeholder="e.g. 9.99" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
+            </div>
+
+            <div>
+              <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Schedule Launch Start Time:</label>
+              <input type="datetime-local" id="create-schedule-time" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;" />
+            </div>
+
+            <div>
+              <label style="font-size: 0.85rem; color: #fab95b; font-weight: 600; display: block; margin-bottom: 6px;">Stone Transparency:</label>
+              <select id="create-transparency" style="width: 100%; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; background: #090e24; color: #fff; box-sizing: border-box;">
+                <option value="Transparent">Transparent</option>
+                <option value="Translucent">Translucent</option>
+                <option value="Opaque">Opaque</option>
+                <option value="Semi-Transparent">Semi-Transparent</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 18px; flex-wrap: wrap; gap: 12px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #ffffff; cursor: pointer;">
+              <input type="checkbox" id="create-is-pair" class="custom-checkbox" />
+              Listing Pairs (Pair of Cabochons)
+            </label>
+
+            <button class="btn btn-add" style="background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); font-weight: bold;" onclick="downloadCreationTemplateCSV()">
+              🚀 Generate & Download eBay Creation CSV
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let parsedListings = [];
+      let rankedGroupsData = [];
+      let selectedGroup = null;
+      let currentTriage = null;
+
+      async function uploadAndAnalyzeReport() {
+        const fileInput = document.getElementById('report-file-input');
+        if (!fileInput.files || fileInput.files.length === 0) {
+          alert('Please select a .xlsx or .csv report file first.');
+          return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        document.getElementById('report-status').innerText = 'Analyzing report... Please wait.';
+        
+        try {
+          const res = await fetch('/api/ebay/analyze-report', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            document.getElementById('report-status').innerText = 'Error analyzing file: ' + (data.error || 'Unknown error');
+            return;
+          }
+          
+          parsedListings = data.listings || [];
+          rankedGroupsData = data.ranked_groups || [];
+          document.getElementById('report-status').innerText = `Successfully loaded ${data.total_listings} active listings across ${data.ranked_groups.length} SKU groups.`;
+          renderQueue(data.ranked_groups);
+        } catch (err) {
+          document.getElementById('report-status').innerText = 'Upload failed: ' + err.message;
+        }
+      }
+
+      async function autoDetectLocalReport() {
+        document.getElementById('report-status').innerText = 'Scanning for recent reports in Downloads...';
+        try {
+          const res = await fetch('/api/ebay/auto-detect-report', { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            document.getElementById('report-status').innerText = 'Auto-detect: ' + (data.error || 'No report found in Downloads.');
+            return;
+          }
+          parsedListings = data.listings || [];
+          rankedGroupsData = data.ranked_groups || [];
+          document.getElementById('report-status').innerText = `Loaded ${data.filename} (${data.total_listings} listings across ${data.ranked_groups.length} groups).`;
+          renderQueue(data.ranked_groups);
+        } catch (err) {
+          document.getElementById('report-status').innerText = 'Scan failed: ' + err.message;
+        }
+      }
+
+      function renderQueue(groups) {
+        const queueContainer = document.getElementById('sku-queue-list');
+        queueContainer.innerHTML = '';
+        
+        groups.forEach((g, index) => {
+          const isHighStale = g.stale_percentage >= 80;
+          const badgeStyle = isHighStale 
+            ? 'background: rgba(255, 82, 82, 0.25); color: #ff5252; border: 1px solid #ff5252;' 
+            : 'background: rgba(250, 185, 91, 0.2); color: #fab95b; border: 1px solid #fab95b;';
+            
+          const cardHtml = `
+            <div class="queue-item-card">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <input type="checkbox" class="custom-checkbox group-select-checkbox" data-group="${g.sku_group}" data-stale="${g.stale_count}" onchange="updateMultiGroupSummary()" ${isHighStale ? 'checked' : ''} />
+                <div>
+                  <strong style="font-size: 1.05rem; color: #ffffff;">#${index + 1} SKU Group: <span style="color: #64b5f6;">${g.sku_group}</span></strong>
+                  <span class="badge" style="${badgeStyle} margin-left: 8px;">${g.stale_percentage}% Stale</span>
+                  <div class="text-muted-bright" style="font-size: 0.85rem; margin-top: 4px;">
+                    Total: <strong class="text-bright">${g.total_count}</strong> | Stale (0 Watchers): <strong style="color: #ff5252;">${g.stale_count}</strong> | Protected Winners: <strong style="color: #2ecc71;">${g.protected_count}</strong> | Avg Age: <strong class="text-bright">${g.avg_age_days}d</strong>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-add" style="padding: 6px 14px; font-size: 0.85rem;" onclick="selectGroupForTriage('${g.sku_group}')">Inspect Triage</button>
+            </div>
+          `;
+          queueContainer.insertAdjacentHTML('beforeend', cardHtml);
+        });
+
+        document.getElementById('queue-card').style.display = 'block';
+        updateMultiGroupSummary();
+      }
+
+      function selectAllStaleQueueGroups(checkedState) {
+        const checkboxes = document.querySelectorAll('.group-select-checkbox');
+        checkboxes.forEach(cb => {
+          cb.checked = checkedState;
+        });
+        updateMultiGroupSummary();
+      }
+
+      function updateMultiGroupSummary() {
+        const checkboxes = document.querySelectorAll('.group-select-checkbox:checked');
+        let selectedGroupCount = 0;
+        let totalStaleCount = 0;
+
+        checkboxes.forEach(cb => {
+          selectedGroupCount++;
+          totalStaleCount += parseInt(cb.getAttribute('data-stale') || '0', 10);
+        });
+
+        document.getElementById('multi-selected-group-count').innerText = selectedGroupCount;
+        document.getElementById('multi-selected-stale-count').innerText = totalStaleCount;
+        document.getElementById('btn-multi-end-count').innerText = totalStaleCount;
+      }
+
+      async function downloadMultiGroupActionEndCSV() {
+        const checkboxes = document.querySelectorAll('.group-select-checkbox:checked');
+        if (checkboxes.length === 0) {
+          alert('Please check at least one SKU group to export.');
+          return;
+        }
+
+        const selectedGroups = Array.from(checkboxes).map(cb => cb.getAttribute('data-group'));
+        let combinedStaleItems = [];
+
+        for (const grp of selectedGroups) {
+          const res = await fetch('/api/ebay/triage-group', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sku_group: grp, listings: parsedListings })
+          });
+          const data = await res.json();
+          if (res.ok && data.success && data.triage && data.triage.stale) {
+            combinedStaleItems = combinedStaleItems.concat(data.triage.stale);
+          }
+        }
+
+        if (combinedStaleItems.length === 0) {
+          alert('No stale items found across the selected groups.');
+          return;
+        }
+
+        exportCSVBlob(combinedStaleItems, `Action_End_Multi_Groups_${selectedGroups.length}_Groups.csv`);
+      }
+
+      async function selectGroupForTriage(grp) {
+        selectedGroup = grp;
+        document.getElementById('selected-group-title').innerText = grp;
+        
+        try {
+          const res = await fetch('/api/ebay/triage-group', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sku_group: grp, listings: parsedListings })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            alert('Triage error: ' + (data.error || 'Failed to triage group'));
+            return;
+          }
+
+          currentTriage = data.triage;
+          document.getElementById('triage-stat-total').innerText = (data.triage.protected.length + data.triage.stale.length);
+          document.getElementById('triage-stat-protected').innerText = data.triage.protected.length;
+          document.getElementById('triage-stat-stale').innerText = data.triage.stale.length;
+          document.getElementById('triage-stat-evergreen').innerText = data.triage.evergreen.length;
+
+          renderTriageTable(data.triage);
+          document.getElementById('triage-card').style.display = 'block';
+          document.getElementById('triage-card').scrollIntoView({ behavior: 'smooth' });
+        } catch (err) {
+          alert('Triage request failed: ' + err.message);
+        }
+      }
+
+      function renderTriageTable(triage) {
+        const tbody = document.getElementById('triage-table-body');
+        tbody.innerHTML = '';
+
+        const allItems = [
+          ...triage.stale.map(i => ({ ...i, category: 'STALE' })),
+          ...triage.protected.map(i => ({ ...i, category: 'PROTECTED' }))
+        ];
+
+        allItems.forEach(item => {
+          const isStale = item.category === 'STALE';
+          const badge = isStale 
+            ? '<span style="color: #ff5252; font-weight: bold;">🔴 STALE (END)</span>' 
+            : '<span style="color: #2ecc71; font-weight: bold;">🟢 PROTECTED</span>';
+            
+          const row = `
+            <tr>
+              <td style="text-align: center;">
+                <input type="checkbox" class="custom-checkbox item-triage-checkbox" data-itemid="${item.item_id}" ${isStale ? 'checked' : ''} onchange="updateTriageCheckedCount()" />
+              </td>
+              <td>${badge}</td>
+              <td style="font-family: monospace; color: #fab95b;">${item.item_id}</td>
+              <td style="color: #ffffff;"><strong>${item.custom_label}</strong></td>
+              <td style="color: #cbd5e1; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.title}</td>
+              <td style="color: #ffffff; text-align: center;">${item.watchers}</td>
+              <td style="color: #ffffff; text-align: center;">${item.item_age_days}d</td>
+            </tr>
+          `;
+          tbody.insertAdjacentHTML('beforeend', row);
+        });
+
+        document.getElementById('master-triage-checkbox').checked = true;
+        updateTriageCheckedCount();
+      }
+
+      function toggleAllTriageCheckboxes(checkedState) {
+        const checkboxes = document.querySelectorAll('.item-triage-checkbox');
+        checkboxes.forEach(cb => {
+          cb.checked = checkedState;
+        });
+        updateTriageCheckedCount();
+      }
+
+      function updateTriageCheckedCount() {
+        const checkedCount = document.querySelectorAll('.item-triage-checkbox:checked').length;
+        document.getElementById('btn-triage-checked-count').innerText = checkedCount;
+      }
+
+      function downloadSelectedTriageItemsCSV() {
+        const checkedBoxes = document.querySelectorAll('.item-triage-checkbox:checked');
+        if (checkedBoxes.length === 0) {
+          alert('Please check at least one item to export.');
+          return;
+        }
+
+        const checkedItemIds = new Set(Array.from(checkedBoxes).map(cb => cb.getAttribute('data-itemid')));
+        const itemsToExport = [];
+
+        if (currentTriage) {
+          const allTriageItems = [...currentTriage.stale, ...currentTriage.protected];
+          allTriageItems.forEach(item => {
+            if (checkedItemIds.has(item.item_id)) {
+              itemsToExport.push(item);
+            }
+          });
+        }
+
+        exportCSVBlob(itemsToExport, `Action_End_${selectedGroup || 'Custom'}.csv`);
+      }
+
+      async function exportCSVBlob(staleItems, filename) {
+        try {
+          const res = await fetch('/api/ebay/export-action-end', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stale_items: staleItems })
+          });
+
+          if (!res.ok) {
+            alert('Failed to generate CSV file');
+            return;
+          }
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } catch (err) {
+          alert('Export failed: ' + err.message);
+        }
+      }
+
+      async function downloadCreationTemplateCSV() {
+        const skuGroup = document.getElementById('create-sku-group').value.trim();
+        if (!skuGroup) {
+          alert('Please enter a target SKU Group (e.g. J9, D1, PP01).');
+          return;
+        }
+
+        const gemstoneName = document.getElementById('create-gemstone-name').value.trim();
+        if (!gemstoneName) {
+          alert('Please enter a Batch Gemstone Name (e.g. Black Rutile Quartz, Chrysoprase).');
+          return;
+        }
+
+        const priceVal = document.getElementById('create-start-price').value.trim();
+        const startPrice = parseFloat(priceVal);
+        if (!priceVal || isNaN(startPrice) || startPrice <= 0) {
+          alert('Please enter a valid Asking Start Price ($).');
+          return;
+        }
+        const scheduleTime = document.getElementById('create-schedule-time').value;
+        const isPair = document.getElementById('create-is-pair').checked;
+
+        try {
+          const res = await fetch('/api/ebay/export-creation-csv', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sku_group: skuGroup,
+              gemstone_name: gemstoneName,
+              start_price: startPrice,
+              schedule_start_time: scheduleTime,
+              is_pair: isPair,
+              transparency: document.getElementById('create-transparency').value
+            })
+          });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            alert('Error generating template: ' + (errData.error || 'No active items found for SKU Group ' + skuGroup));
+            return;
+          }
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `eBay_Creation_Template_${skuGroup}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } catch (err) {
+          alert('Request failed: ' + err.message);
+        }
+      }
+    </script>
+  </body>
+</html>
