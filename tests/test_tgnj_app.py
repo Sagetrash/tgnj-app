@@ -557,6 +557,51 @@ class TestTgnjApp(unittest.TestCase):
             self.assertEqual(data['etsy_delist_alerts'][0]['sku'], 'TEST-301')
             self.assertEqual(data['etsy_delist_alerts'][0]['etsy_listing_id'], '987654321')
 
+    def test_print_pdf_skips_sold_items(self):
+        """Verify /api/printPdf excludes SOLD stones but keeps IN_STOCK ones."""
+        from io import BytesIO
+        self.db.add_item("TEST", 401, "Oval", 10.0, 20, 15, 5)
+        self.db.add_item("TEST", 402, "Pear", 12.0, 22, 14, 6)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'SOLD' WHERE sku_group = 'TEST' AND sku_id = 402;"
+            )
+        with patch('tgnj_app.gui.app.db_instance', self.db), \
+             patch('tgnj_app.gui.app.create_pdf', return_value=BytesIO(b"%PDF-fake")) as mock_pdf:
+            response = self.client.get('/api/printPdf/TEST')
+            self.assertEqual(response.status_code, 200)
+            passed_rows = list(mock_pdf.call_args.kwargs.get("data"))
+            passed_ids = sorted(r["sku_id"] for r in passed_rows)
+            self.assertEqual(passed_ids, [401])
+
+    def test_print_pdf_all_sold_returns_404(self):
+        """Verify /api/printPdf returns 404 when every item in the group is sold."""
+        self.db.add_item("TEST", 403, "Oval", 10.0, 20, 15, 5)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'SOLD' WHERE sku_group = 'TEST' AND sku_id = 403;"
+            )
+        with patch('tgnj_app.gui.app.db_instance', self.db), \
+             patch('tgnj_app.gui.app.create_pdf') as mock_pdf:
+            response = self.client.get('/api/printPdf/TEST')
+            self.assertEqual(response.status_code, 404)
+            mock_pdf.assert_not_called()
+
+    def test_get_csv_data_skips_sold_items(self):
+        """Verify /api/getCsvData excludes SOLD stones."""
+        self.db.add_item("TEST", 404, "Oval", 10.0, 20, 15, 5)
+        self.db.add_item("TEST", 405, "Pear", 12.0, 22, 14, 6)
+        with self.db.conn as conn:
+            conn.cursor().execute(
+                "UPDATE inventory SET status = 'SOLD' WHERE sku_group = 'TEST' AND sku_id = 405;"
+            )
+        with patch('tgnj_app.gui.app.db_instance', self.db):
+            response = self.client.get('/api/getCsvData/TEST')
+            self.assertEqual(response.status_code, 201)
+            body = response.get_data(as_text=True)
+            self.assertIn("TEST-404", body)
+            self.assertNotIn("TEST-405", body)
+
 if __name__ == "__main__":
     unittest.main()
 

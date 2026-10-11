@@ -233,9 +233,16 @@ def printpdf(sku_group):
     data = db_instance.get_items_by_group(sku_group=sku_group)
     if not data:
         return jsonify(message("no data found")),404
-    
+    # Skip sold stones — labels are only for sellable inventory.
     try:
-        pdf_buffer = create_pdf(data=data,logo_path=LOGO_PATH)
+        printable = [r for r in data if str(r["status"] or "").upper() != "SOLD"]
+    except (KeyError, IndexError, TypeError):
+        printable = list(data)
+    if not printable:
+        return jsonify(message("no printable data found (all items sold)")),404
+
+    try:
+        pdf_buffer = create_pdf(data=printable,logo_path=LOGO_PATH)
         return send_file(
             pdf_buffer,
             mimetype='application/pdf',
@@ -452,6 +459,7 @@ def apiEbayExportCreationCSV():
     schedule_start_time = data.get('schedule_start_time', '')
     is_pair = bool(data.get('is_pair', False))
     transparency = data.get('transparency', 'Transparent')
+    title_variant = str(data.get('title_variant', 'rotate') or 'rotate')
     
     if not sku_group:
         return jsonify({'success': False, 'error': 'Missing sku_group'}), 400
@@ -476,7 +484,8 @@ def apiEbayExportCreationCSV():
         start_price=start_price,
         schedule_start_time=schedule_start_time,
         is_pair=is_pair,
-        transparency=transparency
+        transparency=transparency,
+        title_variant=title_variant
     )
     
     mem_file = io.BytesIO(csv_content.encode('utf-8'))

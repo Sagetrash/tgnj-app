@@ -97,8 +97,64 @@ class TestEbayRefresh(unittest.TestCase):
         self.assertIn("#INFO,Version=1.0,,Template=fx_category_template_EBAY_US", csv_out)
         self.assertIn("*Action(SiteID=US|Country=IN|Currency=USD|Version=1193)", csv_out)
         self.assertIn("J9-001", csv_out)
-        self.assertIn("45.5 Ct. Natural Black Rutile Quartz Oval Cabochon Loose Gemstone 34x22x6 mm", csv_out)
+        self.assertIn("45.5 Ct. Genuine Black Rutile Quartz Oval Cabochon Loose Gemstone 34x22x6 mm", csv_out)
         self.assertIn("https://tgnj-pictures.s3.us-east-1.amazonaws.com/J9/J9-001A.jpg", csv_out)
+
+    def test_title_keyword_rotation_and_fixed(self):
+        from tgnj_app.core.ebay_refresh import (
+            NATURAL_SYNONYMS,
+            generate_ebay_creation_csv,
+            resolve_title_keyword,
+        )
+        import csv
+        import io
+
+        # Pool is the truthful recommended set only
+        self.assertEqual(NATURAL_SYNONYMS, ["Natural", "Genuine", "Real", "Authentic"])
+
+        # Deterministic per-SKU rotation
+        self.assertEqual(resolve_title_keyword(4), "Natural")
+        self.assertEqual(resolve_title_keyword(1), "Genuine")
+        self.assertEqual(resolve_title_keyword(2), "Real")
+        self.assertEqual(resolve_title_keyword(3), "Authentic")
+        self.assertEqual(resolve_title_keyword(1, "fixed"), "Natural")
+
+        sample_items = [
+            {"sku_group": "J9", "sku_id": i, "shape": "Oval", "weight": 10.0,
+             "length": 20, "width": 15, "depth": 5}
+            for i in (4, 5, 6, 7)
+        ]
+        csv_out = generate_ebay_creation_csv(
+            items=sample_items,
+            gemstone_name="Chrysoprase",
+            start_price=9.99,
+            schedule_start_time="2026-09-03T20:00:00+05:30",
+        )
+        # parse header + rows, skipping #INFO metadata lines
+        parsed = list(csv.DictReader(io.StringIO("\n".join(
+            [l for l in csv_out.splitlines() if not l.startswith("#INFO")]
+        ))))
+        titles = [r["Title"] for r in parsed]
+        for expected in ("Natural", "Genuine", "Real", "Authentic"):
+            self.assertTrue(
+                any(f"Ct. {expected} Chrysoprase" in t for t in titles),
+                f"missing rotated keyword {expected} in {titles}",
+            )
+        for t in titles:
+            self.assertLessEqual(len(t), 80)
+
+        # Fixed mode keeps every title on Natural
+        fixed_out = generate_ebay_creation_csv(
+            items=sample_items,
+            gemstone_name="Chrysoprase",
+            start_price=9.99,
+            schedule_start_time="2026-09-03T20:00:00+05:30",
+            title_variant="fixed",
+        )
+        fixed = list(csv.DictReader(io.StringIO("\n".join(
+            [l for l in fixed_out.splitlines() if not l.startswith("#INFO")]
+        ))))
+        self.assertTrue(all("Ct. Natural Chrysoprase" in r["Title"] for r in fixed))
 
     def test_flask_ebay_export_creation_route(self):
         from tgnj_app.gui.app import app

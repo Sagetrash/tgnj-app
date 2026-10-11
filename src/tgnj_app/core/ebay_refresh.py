@@ -350,18 +350,40 @@ def generate_action_end_csv(stale_items: List[Dict[str, Any]], end_code: str = "
     return output.getvalue()
 
 
+# Truthful synonyms for "Natural" that match C:Gemstone Creation=Natural and
+# C:Gemstone Treatment=Not Enhanced. Excludes unverifiable claims
+# (Untreated/Certified/origin) per eBay search-manipulation policy.
+NATURAL_SYNONYMS = ["Natural", "Genuine", "Real", "Authentic"]
+
+
+def resolve_title_keyword(sku_id: int, title_variant: str = "rotate") -> str:
+    """Deterministically resolve the Natural-slot keyword for a title.
+
+    sku_id-based rotation keeps the same SKU on the same keyword across
+    exports (reproducible, no random seed needed).
+    """
+    if (title_variant or "rotate").strip().lower() == "fixed":
+        return NATURAL_SYNONYMS[0]
+    try:
+        idx = int(sku_id or 0) % len(NATURAL_SYNONYMS)
+    except (ValueError, TypeError):
+        idx = 0
+    return NATURAL_SYNONYMS[idx]
+
+
 def generate_ebay_creation_csv(
     items: List[Dict[str, Any]],
     gemstone_name: str = "Black Rutile Quartz",
     start_price: float = 9.99,
     schedule_start_time: str = "",
     is_pair: bool = False,
-    transparency: str = "Transparent"
+    transparency: str = "Transparent",
+    title_variant: str = "rotate"
 ) -> str:
     """
     Generates official eBay Bulk Listing Creation CSV matching fx_category_template_EBAY_US schema.
     Includes 3 #INFO metadata headers, mandatory *Action header, 1-minute staggered scheduling,
-    and <= 80 character title length validation guard.
+    deterministic Natural-synonym title rotation, and <= 80 character title length guard.
     """
     from datetime import datetime, timedelta
     
@@ -450,9 +472,10 @@ def generate_ebay_creation_csv(
         item_gem_name = (item.get("gemstone_name") or gemstone_name).strip()
         
         # Build Title with exact formula:
-        # {weight} Ct Natural {gem_name} {shape} Cabochon Loose Gemstone Pair {L}x{W}x{D} mm
+        # {weight} Ct {Natural|Genuine|Real|Authentic} {gem_name} {shape} Cabochon Loose Gemstone Pair {L}x{W}x{D} mm
         wt_str = f"{weight:.2f}".rstrip('0').rstrip('.')
-        title = f"{wt_str} Ct. Natural {item_gem_name} {shape} Cabochon Loose Gemstone {pair_str}{length}x{width}x{depth} mm"
+        keyword = resolve_title_keyword(sku_id, title_variant)
+        title = f"{wt_str} Ct. {keyword} {item_gem_name} {shape} Cabochon Loose Gemstone {pair_str}{length}x{width}x{depth} mm"
         
         # Enforce eBay <= 80 character Title limit
         if len(title) > 80:
